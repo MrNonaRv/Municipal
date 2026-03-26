@@ -1,0 +1,5 @@
+{
+  "name": "GovRecords Desktop",
+  "description": "Desktop application for Government Employee Records Management with local persistence and autosave.",
+  "requestFramePermissions": []
+}
