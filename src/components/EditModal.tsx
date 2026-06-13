@@ -1,25 +1,76 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Employee, Child, Education } from '../types/employee';
+import { Employee, Child, Education, Attachment } from '../types/employee';
 import ServiceRecordEditor from './ServiceRecordEditor';
 import { fileToBase64 } from '../utils/helpers';
-import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft } from 'lucide-react';
+import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface Props {
   employee: Employee;
   onClose: () => void;
   onSave: (emp: Employee, isAutosave?: boolean) => void;
-  initialTab?: 'personal' | 'family' | 'education' | 'service';
+  initialTab?: 'personal' | 'family' | 'education' | 'service' | 'attachments';
   isSaving?: boolean;
 }
 
 export default function EditModal({ employee, onClose, onSave, initialTab = 'personal', isSaving = false }: Props) {
   const [formData, setFormData] = useState<Employee>({ ...employee });
-  const [activeTab, setActiveTab] = useState<'personal' | 'family' | 'education' | 'service'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'personal' | 'family' | 'education' | 'service' | 'attachments'>(initialTab);
   const [error, setError] = useState<string | null>(null);
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const isInitialMount = useRef(true);
+
+  // States for Scanned Documents Attachment
+  const [newDocName, setNewDocName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      try {
+        const base64 = await fileToBase64(file);
+        setSelectedFile(file);
+        setSelectedFileData(base64);
+      } catch (err) {
+        console.error("File loading failed", err);
+      }
+    }
+  };
+
+  const handleAddAttachment = () => {
+    if (!newDocName.trim() || !selectedFile || !selectedFileData) return;
+
+    const newAttachment: Attachment = {
+      id: 'doc-' + Date.now(),
+      name: newDocName.trim(),
+      fileName: selectedFile.name,
+      fileType: selectedFile.type,
+      fileData: selectedFileData,
+      uploadedAt: new Date().toISOString()
+    };
+
+    setFormData(prev => ({
+      ...prev,
+      attachments: [...(prev.attachments || []), newAttachment]
+    }));
+
+    // Reset inputs
+    setNewDocName('');
+    setSelectedFile(null);
+    setSelectedFileData(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setError(null);
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setFormData(prev => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter(item => item.id !== id)
+    }));
+  };
 
   // Autosave effect
   useEffect(() => {
@@ -98,6 +149,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
     { id: 'family', label: 'Family Background', icon: Users },
     { id: 'education', label: 'Education', icon: GraduationCap },
     { id: 'service', label: 'Service Record', icon: Briefcase },
+    { id: 'attachments', label: 'Scanned Documents', icon: FileText },
   ] as const;
 
   const handleSaveClick = () => {
@@ -185,6 +237,18 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
     }
   };
 
+  const handlePdsScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      try {
+        const base64 = await fileToBase64(e.target.files[0]);
+        setFormData({ ...formData, pdsScan: base64 });
+      } catch (err) {
+        console.error("PDS Scan upload failed", err);
+      }
+    }
+  };
+
+
   const handleAddChild = () => {
     setFormData({ ...formData, children: [...formData.children, { name: '', dob: '' }] });
   };
@@ -235,35 +299,36 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm md:p-4" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
       <motion.div 
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95, y: 20 }}
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden"
+        className="bg-white rounded-none md:rounded-2xl shadow-2xl w-full max-w-5xl h-full md:max-h-[90vh] flex flex-col overflow-hidden"
       >
-        <div className="p-5 bg-[var(--navy)] text-white flex justify-between items-center border-b border-white/10">
-          <div className="flex items-center gap-3">
+        <div className="p-4 md:p-5 bg-[var(--navy)] text-white flex justify-between items-center border-b border-white/10">
+          <div className="flex items-center gap-2 md:gap-3">
             <button 
               onClick={onClose} 
               className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 group"
               aria-label="Back to employee list"
             >
               <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
-              Back
+              <span className="hidden sm:inline">Back</span>
             </button>
-            <div className="w-px h-8 bg-white/10 mx-2"></div>
-            <div className="w-10 h-10 bg-[var(--gold)] rounded-lg flex items-center justify-center text-[var(--navy)]">
-              {activeTab === 'personal' && <User size={20} />}
-              {activeTab === 'family' && <Users size={20} />}
-              {activeTab === 'education' && <GraduationCap size={20} />}
-              {activeTab === 'service' && <Briefcase size={20} />}
+            <div className="w-px h-8 bg-white/10 hidden sm:block mx-1"></div>
+            <div className="w-9 h-9 md:w-10 md:h-10 bg-[var(--gold)] rounded-lg flex items-center justify-center text-[var(--navy)] shrink-0">
+              {activeTab === 'personal' && <User size={18} />}
+              {activeTab === 'family' && <Users size={18} />}
+              {activeTab === 'education' && <GraduationCap size={18} />}
+              {activeTab === 'service' && <Briefcase size={18} />}
+              {activeTab === 'attachments' && <FileText size={18} />}
             </div>
             <div>
-              <h2 id="edit-modal-title" className="font-playfair text-xl font-bold">
+              <h2 id="edit-modal-title" className="font-playfair text-base md:text-xl font-bold leading-tight truncate max-w-[140px] xs:max-w-xs sm:max-w-none">
                 {employee.id.startsWith('EMP-') && employee.firstName ? 'Modify Employee Record' : 'New Employee Record'}
               </h2>
-              <p className="text-[10px] uppercase tracking-widest text-slate-400 font-bold">
+              <p className="text-[9px] md:text-[10px] uppercase tracking-widest text-slate-400 font-bold leading-none mt-0.5">
                 {employee.id.startsWith('EMP-') ? `Record ID: ${employee.id}` : 'System Initialization'}
               </p>
             </div>
@@ -273,7 +338,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
           </button>
         </div>
         
-        <div className="flex border-b border-slate-200 bg-slate-50/50 px-4" role="tablist" aria-label="Edit record sections">
+        <div className="flex overflow-x-auto whitespace-nowrap scrollbar-none border-b border-slate-200 bg-slate-50/50 px-4" role="tablist" aria-label="Edit record sections">
           {tabs.map(tab => (
             <button
               key={tab.id}
@@ -282,7 +347,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
               aria-controls={`panel-${tab.id}`}
               aria-selected={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-6 py-4 text-xs font-bold uppercase tracking-widest border-b-2 transition-all ${
+              className={`flex items-center gap-2 px-4 md:px-6 py-3 md:py-4 text-[10px] md:text-xs font-bold uppercase tracking-widest border-b-2 transition-all flex-shrink-0 ${
                 activeTab === tab.id 
                   ? 'border-[var(--gold)] text-[var(--navy)] bg-white' 
                   : 'border-transparent text-slate-400 hover:text-slate-600 hover:bg-slate-100/50'
@@ -308,7 +373,8 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
             >
               {activeTab === 'personal' && (
                 <div className="space-y-8">
-                  <div className="flex flex-col md:flex-row items-start gap-8">
+                  <div className="flex flex-col md:flex-row items-center md:items-start gap-8">
+                    {/* PHOTO UPLOAD */}
                     <div className="flex flex-col items-center gap-3">
                       <div className="w-40 h-40 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative group shadow-inner">
                         {formData.photo ? (
@@ -322,17 +388,61 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
                           <input type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
                         </label>
                       </div>
-                      {formData.photo && (
+                      {formData.photo ? (
                         <button 
+                          type="button"
                           onClick={() => setFormData({ ...formData, photo: null })} 
                           className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-700 transition-colors"
                         >
                           Remove Image
                         </button>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">
+                          ID Photo
+                        </span>
+                      )}
+                    </div>
+
+                    {/* SCANNED PDS WORKSHEET */}
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-40 h-40 rounded-2xl bg-slate-50 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative group shadow-inner">
+                        {formData.pdsScan ? (
+                          <img src={formData.pdsScan} alt="PDS Scan" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="flex flex-col items-center text-slate-300 text-center p-2">
+                            <FileUp className="text-slate-300 mb-1" size={32} />
+                            <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">No PDS Scan</span>
+                          </div>
+                        )}
+                        <label className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 cursor-pointer transition-all duration-300 select-none">
+                          <FileUp size={24} className="mb-1" />
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-center px-2">Upload PDS Scan</span>
+                          <input type="file" accept="image/*" className="hidden" onChange={handlePdsScanUpload} />
+                        </label>
+                      </div>
+                      {formData.pdsScan ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="text-[9px] font-bold uppercase text-emerald-500 tracking-wider flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+                            Scan Connected
+                          </span>
+                          <button 
+                            type="button"
+                            onClick={() => setFormData({ ...formData, pdsScan: null })} 
+                            className="text-[10px] font-bold uppercase tracking-widest text-red-500 hover:text-red-700 transition-colors"
+                          >
+                            Remove Scan
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[10px] font-bold uppercase text-slate-400 tracking-widest">
+                          PDS Scan Image
+                        </span>
                       )}
                     </div>
                     
-                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6 w-full">
+
                       <div className="space-y-1">
                         <label htmlFor="surname" className="data-label">Surname</label>
                         <input 
@@ -770,6 +880,112 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'per
                   records={formData.serviceRecords} 
                   onChange={(records) => setFormData({ ...formData, serviceRecords: records })} 
                 />
+              )}
+
+              {activeTab === 'attachments' && (
+                <div className="space-y-6">
+                  <div className="border border-slate-200 rounded-2xl p-6 bg-slate-50/50 text-slate-900">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700 mb-4 flex items-center gap-2">
+                      <FileUp size={16} className="text-[var(--gold)]" /> Upload Scanned Document
+                    </h3>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                      <div className="space-y-2">
+                        <label className="data-label text-xs">Document Name / Label</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Birth Certificate, Diploma, Oath of Office"
+                          value={newDocName}
+                          onChange={e => setNewDocName(e.target.value)}
+                          className="w-full border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)]"
+                        />
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <label className="data-label text-xs">Scanned Document or Image File</label>
+                        <div className="flex gap-3">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAttachmentFileChange}
+                            ref={fileInputRef}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => fileInputRef.current?.click()}
+                            className="flex-1 px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-[var(--gold)] transition-colors text-sm text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2 bg-white"
+                          >
+                            <FileText size={16} />
+                            {selectedFile ? selectedFile.name : "Select Image File (Scanned)"}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleAddAttachment}
+                        disabled={!newDocName.trim() || !selectedFileData}
+                        className="px-6 py-2 bg-[var(--gold)] text-[var(--navy)] text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-opacity-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                      >
+                        <Plus size={14} /> Add Document
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <h4 className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                      Uploaded Attachments ({(formData.attachments || []).length})
+                    </h4>
+                    
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {(formData.attachments || []).map((doc) => (
+                        <div key={doc.id} className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500 overflow-hidden shrink-0">
+                              {doc.fileType.startsWith('image/') ? (
+                                <img src={doc.fileData} alt={doc.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <FileText size={20} className="text-indigo-500" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-sm text-slate-800 truncate">{doc.name}</p>
+                              <p className="text-[10px] text-slate-400 truncate mb-1">{doc.fileName}</p>
+                              <p className="text-[9px] text-slate-400 font-mono">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                          
+                          <div className="flex items-center gap-2 shrink-0">
+                            <a
+                              href={doc.fileData}
+                              download={doc.fileName}
+                              className="p-2 text-slate-400 hover:text-[var(--navy)] hover:bg-slate-50 rounded-lg transition-colors"
+                              title="Download document"
+                            >
+                              <Download size={16} />
+                            </a>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAttachment(doc.id)}
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Remove document"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                      {(formData.attachments || []).length === 0 && (
+                        <div className="col-span-2 border-2 border-dashed border-slate-100 rounded-xl p-8 text-center text-slate-400 italic text-xs">
+                          No scanned documents uploaded for this employee dossier yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               )}
             </motion.div>
           </AnimatePresence>

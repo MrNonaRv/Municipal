@@ -60,7 +60,7 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
           </div>
         </div>
 
-        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+        <div className="flex items-center gap-2 max-md:opacity-100 md:opacity-0 group-hover:opacity-100 transition-all">
           <button 
             onClick={() => onView(employee)} 
             aria-label={`View dossier for ${employee.firstName} ${employee.surname}`}

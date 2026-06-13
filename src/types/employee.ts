@@ -28,6 +28,15 @@ export interface ServiceRecord {
   sepCause: string;
 }
 
+export interface Attachment {
+  id: string;
+  name: string;
+  fileName: string;
+  fileType: string;
+  fileData: string; // Base64 Data URI
+  uploadedAt: string;
+}
+
 export interface Employee {
   id: string;
   photo: string | null;
@@ -78,4 +87,7 @@ export interface Employee {
   // Education & Service
   education: Education[];
   serviceRecords: ServiceRecord[];
+  attachments?: Attachment[];
+  pdsScan?: string | null;
 }
+

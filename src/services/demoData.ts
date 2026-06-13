@@ -8,7 +8,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     firstName: "MA. AURORA",
     middleName: "PADIOS",
     nameExtension: "",
-    dateOfBirth: "1968-08-15",
+    dateOfBirth: "1970-09-06",
     placeOfBirth: "Mambusao, Capiz",
     sex: "Female",
     civilStatus: "Married",
@@ -48,9 +48,35 @@ export const DEMO_EMPLOYEES: Employee[] = [
       { id: "edu-1", level: "College", school: "Capiz State University", course: "BS Commerce", yearGraduated: "1989", from: "1985", to: "1989", honors: "" }
     ],
     serviceRecords: [
-      { id: "sr-1", from: "1991-07-01", to: "1995-12-31", designation: "Bookkeeper", status: "Perm.", salary: "P120,000/a", station: "Mambusao", branch: "Local", lwop: "", sepDate: "", sepCause: "" },
-      { id: "sr-2", from: "1996-01-01", to: "2005-06-30", designation: "Admin Officer I", status: "Perm.", salary: "P180,000/a", station: "Mambusao", branch: "Local", lwop: "", sepDate: "", sepCause: "" },
-      { id: "sr-3", from: "2005-07-01", to: "Present", designation: "Municipal Civil Registrar I", status: "Perm.", salary: "P477,600/a", station: "Mambusao", branch: "Local", lwop: "", sepDate: "", sepCause: "" }
+      { id: "sr-1", from: "12/01/91", to: "06/04/92", designation: "Bookkeeper", status: "Prob.", salary: "P2,000.00/mo", station: "Office of the Mun. Treasurer", branch: "LGU of Mambusao", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-2", from: "06/05/92", to: "07/09/92", designation: "Liaison Clerk", status: "Prob.", salary: "P89.00/day", station: "Queen City Dev't Bank, Iloilo", branch: "CAGPRDCDA, Roxas City", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-3", from: "07/10/92", to: "08/31/94", designation: "Accountant", status: "Prob.", salary: "P2,000.00/mo", station: "Office of the Mun. Treasurer", branch: "LGU of Mambusao", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-4", from: "10/01/94", to: "12/31/94", designation: "Acctg. Mgt. Analyst I", status: "Perm.", salary: "P33,504.00/a", station: "Office of the Mun. Acct.", branch: "LGU of Mambusao", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-5", from: "01/01/95", to: "06/30/95", designation: "-do-", status: "-do-", salary: "P36,192.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-6", from: "07/01/95", to: "12/31/95", designation: "-do-", status: "-do-", salary: "P42,192.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-7", from: "01/01/96", to: "12/31/96", designation: "-do-", status: "-do-", salary: "P55,080.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-8", from: "01/01/97", to: "12/31/97", designation: "-do-", status: "-do-", salary: "P71,172.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-9", from: "01/01/98", to: "12/31/98", designation: "-do-", status: "-do-", salary: "P81,012.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-10", from: "01/01/99", to: "12/31/99", designation: "-do-", status: "-do-", salary: "P114,924.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-11", from: "01/01/00", to: "12/31/00", designation: "-do-", status: "-do-", salary: "P120,396.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-12", from: "01/01/01", to: "12/31/01", designation: "-do-", status: "-do-", salary: "P126,420.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-13", from: "01/01/02", to: "12/31/02", designation: "-do-", status: "-do-", salary: "P126,420.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-14", from: "01/01/03", to: "12/31/03", designation: "-do-", status: "-do-", salary: "P126,420.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-15", from: "01/01/04", to: "12/31/04", designation: "-do-", status: "-do-", salary: "P126,420.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-16", from: "01/01/05", to: "12/31/05", designation: "-do-", status: "-do-", salary: "P126,420.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-17", from: "01/01/06", to: "12/31/06", designation: "-do-", status: "-do-", salary: "P126,420.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-18", from: "01/01/07", to: "06/30/07", designation: "-do-", status: "-do-", salary: "P139,068.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-19", from: "07/01/07", to: "12/31/07", designation: "-do-", status: "-do-", salary: "P139,068.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-20", from: "01/01/08", to: "01/27/08", designation: "-do-", status: "-do-", salary: "P139,068.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-21", from: "01/28/08", to: "06/30/08", designation: "Administrative Officer III", status: "Perm.", salary: "P165,612.00/a", station: "Office of the MBO", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-22", from: "07/01/08", to: "12/31/08", designation: "-do-", status: "-do-", salary: "P182,172.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-23", from: "01/01/09", to: "12/31/09", designation: "-do-", status: "-do-", salary: "P182,172.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-24", from: "01/01/10", to: "12/31/10", designation: "-do-", status: "-do-", salary: "P182,172.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-25", from: "01/01/11", to: "06/20/11", designation: "-do-", status: "-do-", salary: "P182,832.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-26", from: "06/21/11", to: "12/31/11", designation: "Municipal Civil Registrar I", status: "Temp.", salary: "P331,044.00/a", station: "Office of the MCR", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-27", from: "01/01/12", to: "12/31/12", designation: "-do-", status: "-do-", salary: "P383,628.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-28", from: "01/01/13", to: "08/31/13", designation: "-do-", status: "-do-", salary: "P449,412.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" },
+      { id: "sr-29", from: "09/01/13", to: "to date", designation: "-do-", status: "-do-", salary: "P477,600.00/a", station: "-do-", branch: "-do-", lwop: "None", sepDate: "", sepCause: "" }
     ]
   }
 ];

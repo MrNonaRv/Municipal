@@ -24,7 +24,7 @@ export default function App() {
   // Modals state
   const [viewingEmp, setViewingEmp] = useState<Employee | null>(null);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
-  const [editTab, setEditTab] = useState<'personal' | 'family' | 'education' | 'service'>('personal');
+  const [editTab, setEditTab] = useState<'personal' | 'family' | 'education' | 'service' | 'attachments'>('personal');
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
   const [deletingEmp, setDeletingEmp] = useState<Employee | null>(null);
 
@@ -117,7 +117,7 @@ export default function App() {
     <div className="min-h-screen flex flex-col bg-[#f0f2f5]">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[var(--navy)] text-white shadow-lg print:hidden">
-        <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 h-20 flex items-center justify-between">
           <div className="flex items-center gap-4">
             <motion.div 
               initial={{ rotate: -10, scale: 0.9 }}
@@ -160,7 +160,7 @@ export default function App() {
 
       {/* Stats Strip */}
       <div className="bg-white border-b border-slate-200 print:hidden">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex flex-wrap items-center justify-between gap-4">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center justify-between gap-4">
           <div className="flex gap-8 text-sm">
             <div className="flex flex-col">
               <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Total Records</span>
@@ -221,7 +221,7 @@ export default function App() {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 max-w-7xl mx-auto px-6 py-8 w-full print:hidden">
+      <main className="flex-1 max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8 w-full print:hidden">
         {isLoading ? (
           <div className="flex flex-col justify-center items-center h-96 gap-4">
             <div className="relative w-16 h-16">

@@ -2,8 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
+import fs from 'fs/promises';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 
@@ -36,37 +35,56 @@ function decrypt(text: string) {
   return decrypted;
 }
 
+// Low-dependency JSON Database
+const DB_FILE = path.join(process.cwd(), 'database.json');
+interface DatabaseSchema {
+  [id: string]: string;
+}
+
+let dbCache: DatabaseSchema = {};
+
+async function loadDb() {
+  try {
+    const content = await fs.readFile(DB_FILE, 'utf-8');
+    dbCache = JSON.parse(content);
+  } catch (error: any) {
+    if (error.code === 'ENOENT') {
+      dbCache = {};
+      await saveDb();
+    } else {
+      console.error('Failed to load JSON database:', error);
+    }
+  }
+}
+
+async function saveDb() {
+  try {
+    await fs.writeFile(DB_FILE, JSON.stringify(dbCache, null, 2), 'utf-8');
+  } catch (error) {
+    console.error('Failed to save JSON database:', error);
+  }
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  // Initialize SQLite
-  const db = await open({
-    filename: './database.sqlite',
-    driver: sqlite3.Database
-  });
-
-  // Create table if not exists
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS employees (
-      id TEXT PRIMARY KEY,
-      data TEXT NOT NULL
-    )
-  `);
+  // Initialize DB
+  await loadDb();
 
   app.use(express.json({ limit: '50mb' }));
 
   // API Routes
   app.get('/api/employees', async (req, res) => {
     try {
-      const rows = await db.all('SELECT data FROM employees');
-      const employees = rows.map(row => {
+      const records = Object.values(dbCache);
+      const employees = records.map(encryptedData => {
         try {
-          return JSON.parse(decrypt(row.data));
+          return JSON.parse(decrypt(encryptedData));
         } catch (e) {
           // If decryption fails, maybe it's not encrypted yet? (for migration)
           try {
-            return JSON.parse(row.data);
+            return JSON.parse(encryptedData);
           } catch (e2) {
             return null;
           }
@@ -83,10 +101,8 @@ async function startServer() {
     try {
       const employee = req.body;
       const encryptedData = encrypt(JSON.stringify(employee));
-      await db.run(
-        'INSERT OR REPLACE INTO employees (id, data) VALUES (?, ?)',
-        [employee.id, encryptedData]
-      );
+      dbCache[employee.id] = encryptedData;
+      await saveDb();
       res.json({ success: true });
     } catch (error) {
       console.error(error);
@@ -96,7 +112,11 @@ async function startServer() {
 
   app.delete('/api/employees/:id', async (req, res) => {
     try {
-      await db.run('DELETE FROM employees WHERE id = ?', [req.params.id]);
+      const id = req.params.id;
+      if (dbCache[id]) {
+        delete dbCache[id];
+        await saveDb();
+      }
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete employee' });

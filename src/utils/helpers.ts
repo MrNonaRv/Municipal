@@ -23,5 +23,6 @@ export const generateEmptyEmployee = (): import('../types/employee').Employee =>
   fatherSurname: '', fatherFirstName: '', fatherMiddleName: '',
   motherSurname: '', motherFirstName: '', motherMiddleName: '',
   education: [],
-  serviceRecords: []
+  serviceRecords: [],
+  pdsScan: null
 });
