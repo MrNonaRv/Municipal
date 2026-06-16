@@ -6,12 +6,12 @@ import { motion, AnimatePresence } from 'motion/react';
 interface Props {
   employee: Employee;
   onClose: () => void;
-  onEdit: (emp: Employee, tab?: 'personal' | 'service' | 'attachments') => void;
+  onEdit: (emp: Employee, tab?: 'service' | 'attachments') => void;
   onDelete: (emp: Employee) => void;
 }
 
 export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Props) {
-  const [activeTab, setActiveTab] = useState<'pds' | 'sr' | 'docs'>('pds');
+  const [activeTab, setActiveTab] = useState<'sr' | 'docs'>('sr');
   const [showDigitalPds, setShowDigitalPds] = useState<boolean>(!employee.pdsScan);
   const [isFullScreenPds, setIsFullScreenPds] = useState<boolean>(false);
   const [scale, setScale] = useState<number>(1);
@@ -70,7 +70,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
         initial={{ opacity: 0, scale: 0.9, y: 40 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 40 }}
-        className={`bg-white shadow-2xl flex flex-col overflow-hidden transition-all duration-300 print:block print:overflow-visible print:max-w-none print:max-h-none print:shadow-none print:rounded-none border border-white/20 ${
+        className={`bg-white shadow-2xl flex flex-col overflow-hidden transition-all duration-300 border border-white/20 print:hidden ${
           isModalFullScreen 
             ? 'w-full h-full rounded-none max-w-none' 
             : 'rounded-none md:rounded-[2.5rem] w-full max-w-[1200px] h-full md:max-h-[95vh]'
@@ -106,17 +106,6 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
             <div className="h-10 w-px bg-white/10 hidden lg:block"></div>
 
             <div className="flex bg-slate-900 p-1 rounded-2xl border border-white/5 overflow-x-auto whitespace-nowrap scrollbar-none max-w-full" role="tablist" aria-label="Dossier sections">
-              <button 
-                role="tab" 
-                id="tab-pds"
-                aria-controls="panel-pds"
-                aria-selected={activeTab === 'pds'} 
-                onClick={() => setActiveTab('pds')} 
-                className={`flex items-center gap-2 px-4 md:px-6 py-2 md:py-2.5 text-[9px] md:text-[10px] font-black uppercase tracking-widest rounded-xl transition-all flex-shrink-0 ${activeTab === 'pds' ? 'bg-[var(--gold)] text-[var(--navy)] shadow-lg shadow-gold/20' : 'text-slate-500 hover:text-white hover:bg-white/5'}`}
-              >
-                <FileText size={14} />
-                Dossier (PDS)
-              </button>
               <button 
                 role="tab" 
                 id="tab-sr"
@@ -160,7 +149,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
               <span className="hidden sm:inline">Print</span>
             </button>
             <button 
-              onClick={() => onEdit(employee, activeTab === 'sr' ? 'service' : activeTab === 'docs' ? 'attachments' : 'personal')} 
+              onClick={() => onEdit(employee, activeTab === 'sr' ? 'service' : 'attachments')} 
               aria-label="Edit record"
               className="flex items-center gap-2 p-2.5 md:px-5 md:py-2.5 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 group"
             >
@@ -186,21 +175,11 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
         {/* Scrollable Content Area */}
         <div className={`flex-1 overflow-auto bg-slate-200 p-4 transition-all ${isModalFullScreen ? 'md:p-6' : 'md:p-12'} print:block print:p-0 print:bg-white print:overflow-visible custom-scrollbar relative`}>
           
-          {/* Zoom Controls for narrow screen */}
-          <div className="flex justify-end mb-4 no-print lg:hidden">
-            <button
-              type="button"
-              onClick={() => setFitToWidth(!fitToWidth)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-white/10 text-white text-[9px] font-black uppercase tracking-wider rounded-xl shadow-md transition-all active:scale-95 cursor-pointer animate-pulse"
-            >
-              <ZoomIn size={12} className="text-[var(--gold)]" />
-              {fitToWidth ? "Original Size" : "Fit to Screen"}
-            </button>
-          </div>
+
 
           <div className="w-full flex flex-col items-center pb-12">
             <AnimatePresence mode="wait">
-              {activeTab === 'pds' && (
+              {false && (
                 <div 
                   className="paper-texture mx-auto shadow-[0_50px_100px_-20px_rgba(0,0,0,0.3)] print:shadow-none relative rounded-sm overflow-hidden shrink-0" 
                   style={{ 
@@ -712,6 +691,40 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
+                    {employee.pdsScan && (
+                      <div className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+                        <div>
+                          <div className="w-full h-48 bg-slate-100 rounded-xl mb-4 border border-slate-200 flex items-center justify-center overflow-hidden relative group">
+                            <img src={employee.pdsScan} alt="Personal Data Sheet Scan" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <button
+                                onClick={() => setIsFullScreenPds(true)}
+                                type="button"
+                                className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110"
+                                title="View full PDS scan"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>
+                              </button>
+                            </div>
+                          </div>
+                          
+                          <h3 className="font-sans font-black text-slate-800 text-base uppercase tracking-tight truncate mb-1">Personal Data Sheet (PDS)</h3>
+                          <p className="text-xs text-slate-400 truncate mb-2">pds_scan_file.png</p>
+                        </div>
+
+                        <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-mono text-[9px]">Official Upload</span>
+                          <a
+                            href={employee.pdsScan}
+                            download={`${employee.surname}_PDS_Scan.png`}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-[var(--gold)] text-[var(--navy)] hover:bg-opacity-90 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                          >
+                            <Download size={12} /> Download
+                          </a>
+                        </div>
+                      </div>
+                    )}
+
                     {(employee.attachments || []).map((doc) => (
                       <div key={doc.id} className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                         <div>
@@ -752,7 +765,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                         </div>
                       </div>
                     ))}
-                    {(employee.attachments || []).length === 0 && (
+                    {(employee.attachments || []).length === 0 && !employee.pdsScan && (
                       <div className="col-span-full border-2 border-dashed border-slate-300 rounded-2xl p-16 text-center text-slate-400 w-full bg-slate-50">
                         <FileText size={48} className="mx-auto mb-4 opacity-30 text-slate-500" />
                         <h4 className="font-sans font-bold text-lg mb-1">No scanned files attached</h4>
@@ -774,6 +787,134 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
         </div>
 
       </motion.div>
+
+      {/* PRINT-ONLY DOSSIER VIEW */}
+      <div className="hidden print:block w-full bg-white text-black p-8">
+        <div className="w-full">
+          {/* Title block */}
+          <div className="text-center mb-6">
+            <p className="text-[10px] uppercase font-bold tracking-[0.25em] text-slate-500 leading-tight">Republic of the Philippines</p>
+            <p className="text-xs uppercase font-extrabold tracking-[0.1em] text-slate-700 leading-normal">MUNICIPALITY OF MAMBUSAO • PROVINCE OF CAPIZ</p>
+            <h2 className="text-2xl font-black text-slate-900 tracking-wide uppercase mt-4 mb-1">file record sheet</h2>
+            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 italic">Official Permanent Service Record</p>
+            <div className="w-16 h-1 bg-slate-900 mx-auto mt-4"></div>
+          </div>
+
+          {/* Header metadata summary strip */}
+          <div className="grid grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-300 rounded-2xl mb-6 text-left">
+            <div>
+              <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Employee Surname</span>
+              <strong className="text-sm font-extrabold text-slate-900 uppercase block">{employee.surname || '—'}</strong>
+            </div>
+            <div>
+              <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Given & Middle Name</span>
+              <strong className="text-sm font-extrabold text-slate-900 uppercase block">{employee.firstName} {employee.middleName || ''}</strong>
+            </div>
+            <div>
+              <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Date & Place of Birth</span>
+              <strong className="text-sm font-extrabold text-slate-755 block">{employee.dateOfBirth} / {employee.placeOfBirth || '—'}</strong>
+            </div>
+            <div>
+              <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Dossier Account ID</span>
+              <strong className="text-sm font-mono text-slate-600 block">EMP-{employee.id.toString().padStart(6, '0')}</strong>
+            </div>
+          </div>
+
+          <p className="text-[10px] text-justify leading-relaxed mb-4 text-slate-600 italic">
+            This is to certify that the employee named herein has rendered services in this Government Unit as itemized below in chronological sequence, supported by authorized appointments:
+          </p>
+
+          {/* Records Table */}
+          <div className="border border-slate-300 rounded-xl overflow-hidden">
+            <table className="w-full border-collapse border border-slate-300 text-[10px] leading-normal text-center bg-white">
+              <thead>
+                <tr className="bg-slate-50 text-slate-850 font-extrabold uppercase border-b border-slate-300">
+                  <th className="border border-slate-300 px-2 py-2 text-[9px] w-12 text-slate-500 font-bold">S.N.</th>
+                  <th className="border border-slate-300 px-2 py-2 w-24">inclusive from</th>
+                  <th className="border border-slate-300 px-2 py-2 w-24">inclusive to</th>
+                  <th className="border border-slate-300 px-2 py-2 text-left">designation / title</th>
+                  <th className="border border-slate-300 px-2 py-2 w-24">appointment status</th>
+                  <th className="border border-slate-300 px-2 py-2 text-right">annual salary rate</th>
+                  <th className="border border-slate-300 px-2 py-2 text-left">station / place of assignment</th>
+                  <th className="border border-slate-300 px-2 py-2 w-20">office branch</th>
+                  <th className="border border-slate-300 px-2 py-2 w-16">l/v w/o pay</th>
+                  <th className="border border-slate-300 px-2 py-2 w-20">separation date</th>
+                  <th className="border border-slate-300 px-2 py-2 text-left">cause of separation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {employee.serviceRecords.map((rec, i) => (
+                  <tr key={i} className="border-b border-slate-200">
+                    <td className="border border-slate-300 px-2 py-2 font-bold font-mono text-center text-[9px] text-slate-400 bg-slate-50/50">
+                      {i + 1}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center font-mono text-[9px] font-semibold text-slate-600 whitespace-nowrap">
+                      {rec.from}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center font-mono text-[9px] font-semibold text-slate-600 whitespace-nowrap">
+                      {rec.to}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-left uppercase font-bold text-slate-800 break-words font-sans max-w-[150px]">
+                      {rec.designation}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center uppercase font-semibold text-slate-605 text-[8.5px]">
+                      {rec.status}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-right font-mono font-bold text-slate-700 whitespace-nowrap">
+                      {rec.salary}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-left uppercase font-medium text-slate-600 break-words font-sans max-w-[180px]">
+                      {rec.station}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center uppercase font-bold text-slate-500 font-sans text-[8.5px]">
+                      {rec.branch}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center uppercase font-medium text-slate-550 whitespace-nowrap">
+                      {rec.lwop || 'None'}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-center font-mono text-[9px] text-slate-500 whitespace-nowrap">
+                      {rec.sepDate || '—'}
+                    </td>
+                    <td className="border border-slate-300 px-2 py-2 text-left uppercase font-medium text-slate-550 break-words font-sans max-w-[130px]">
+                      {rec.sepCause || '—'}
+                    </td>
+                  </tr>
+                ))}
+                {employee.serviceRecords.length === 0 && (
+                  <tr>
+                    <td colSpan={11} className="border border-slate-300 p-8 text-slate-400 italic text-xs text-center">
+                      No service records found in official database.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Scanned PDS image if exists */}
+        {employee.pdsScan && (
+          <div className="p-4 flex flex-col items-center justify-center min-h-screen text-center" style={{ pageBreakBefore: 'always', breakBefore: 'page' }}>
+            <h3 className="text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">Scanned Personal Data Sheet (PDS)</h3>
+            <p className="text-[9px] text-slate-400 mb-4">Official Document Scan of {employee.firstName} {employee.surname}</p>
+            <img src={employee.pdsScan} alt="PDS Scan Image" className="max-w-full max-h-[85vh] object-contain border border-slate-300 shadow-sm" />
+          </div>
+        )}
+
+        {/* Additional Scanned Docs Scans (Attachments) if exist */}
+        {(employee.attachments || []).map((doc) => {
+          if (doc.fileData && doc.fileData.startsWith('data:image/')) {
+            return (
+              <div key={doc.id} className="p-4 flex flex-col items-center justify-center min-h-screen text-center" style={{ pageBreakBefore: 'always', breakBefore: 'page' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">{doc.name}</h3>
+                <p className="text-[9px] text-slate-400 mb-4">Scanned Attachment: {doc.fileName}</p>
+                <img src={doc.fileData} alt={doc.name} className="max-w-full max-h-[85vh] object-contain border border-slate-300 shadow-sm" />
+              </div>
+            );
+          }
+          return null;
+        })}
+      </div>
 
       {/* FULLSCREEN LIGHTBOX PORTAL */}
       <AnimatePresence>

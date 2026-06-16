@@ -110,10 +110,12 @@ h1, h2, h3, h4, h5, h6, .font-playfair {
   .print-only {
     display: block !important;
   }
+  
   @page {
     size: A4;
     margin: 0;
   }
+
   .paper-texture {
     background-image: none !important;
     background-color: white !important;

@@ -15,7 +15,42 @@ export default function CSVModal({ onClose, onImport, employees }: Props) {
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    setError(null);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (activeTab === 'bulk' && file.name.endsWith('.csv')) {
+        parseCSV(content);
+      } else if (activeTab === 'single' && file.name.endsWith('.json')) {
+        parseJSON(content);
+      } else {
+        setError(`Invalid file type. Please upload a ${activeTab === 'bulk' ? '.csv' : '.json'} file.`);
+      }
+    };
+    reader.onerror = () => {
+      setError("Failed to read the file.");
+    };
+    reader.readAsText(file);
+  };
 
   const handleImport = async () => {
     setIsImporting(true);
@@ -278,10 +313,17 @@ export default function CSVModal({ onClose, onImport, employees }: Props) {
               <button 
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
                 aria-label={`Upload ${activeTab === 'bulk' ? 'CSV' : 'JSON'} file`}
-                className="w-full border-2 border-dashed border-gray-300 rounded-xl p-8 text-center cursor-pointer hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-[var(--gold)]"
+                className={`w-full border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all focus:outline-none focus:ring-2 focus:ring-[var(--gold)] ${
+                  isDragging 
+                    ? 'border-[var(--gold)] bg-amber-50/25 scale-[0.99]' 
+                    : 'border-gray-300 hover:bg-gray-50'
+                }`}
               >
-                <Upload className="mx-auto text-gray-400 mb-3" size={32} />
+                <Upload className={`mx-auto mb-3 transition-colors ${isDragging ? 'text-[var(--gold)]' : 'text-gray-400'}`} size={32} />
                 <p className="text-gray-600 font-medium">Click to upload {activeTab === 'bulk' ? 'CSV' : 'JSON'} file</p>
                 <p className="text-gray-400 text-sm mt-1">or drag and drop here</p>
               </button>
@@ -364,10 +406,10 @@ export default function CSVModal({ onClose, onImport, employees }: Props) {
               </div>
 
               <div className="flex gap-4">
-                <button onClick={exportCSV} disabled={selectedForExport.size === 0} className="flex-1 py-2 bg-[var(--navy)] text-white rounded font-medium disabled:opacity-50 flex justify-center items-center gap-2">
+                <button onClick={exportCSV} disabled={selectedForExport.size === 0} className="flex-1 py-2 bg-[var(--navy)] hover:bg-[var(--navy-light)] transition-colors text-white rounded font-medium disabled:opacity-50 flex justify-center items-center gap-2">
                   <FileSpreadsheet size={18}/> Export as CSV
                 </button>
-                <button onClick={exportJSON} disabled={selectedForExport.size === 0} className="flex-1 py-2 bg-[var(--navy3)] text-white rounded font-medium disabled:opacity-50 flex justify-center items-center gap-2">
+                <button onClick={exportJSON} disabled={selectedForExport.size === 0} className="flex-1 py-2 bg-[var(--navy-light)] hover:bg-[var(--navy-lighter)] transition-colors text-white rounded font-medium disabled:opacity-50 flex justify-center items-center gap-2">
                   <FileJson size={18}/> Export as JSON
                 </button>
               </div>

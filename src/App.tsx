@@ -24,7 +24,7 @@ export default function App() {
   // Modals state
   const [viewingEmp, setViewingEmp] = useState<Employee | null>(null);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
-  const [editTab, setEditTab] = useState<'personal' | 'family' | 'education' | 'service' | 'attachments'>('personal');
+  const [editTab, setEditTab] = useState<'service' | 'attachments'>('service');
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
   const [deletingEmp, setDeletingEmp] = useState<Employee | null>(null);
 
@@ -147,7 +147,7 @@ export default function App() {
               <span className="hidden md:inline">Data Center</span>
             </button>
             <button 
-              onClick={() => { setEditingEmp(generateEmptyEmployee()); setEditTab('personal'); }}
+              onClick={() => { setEditingEmp(generateEmptyEmployee()); setEditTab('service'); }}
               aria-label="Add new employee"
               className="flex items-center gap-2 px-4 py-2 bg-[var(--gold)] hover:bg-[var(--gold-light)] text-[var(--navy)] rounded-lg text-sm font-bold shadow-lg shadow-gold/20 transition-all hover:scale-105 active:scale-95"
             >
@@ -270,7 +270,7 @@ export default function App() {
                     employee={emp} 
                     viewMode={viewMode}
                     onView={setViewingEmp}
-                    onEdit={(emp) => { setEditingEmp(emp); setEditTab('personal'); }}
+                    onEdit={(emp) => { setEditingEmp(emp); setEditTab('service'); }}
                     onDelete={setDeletingEmp}
                   />
                 </motion.div>
@@ -286,7 +286,7 @@ export default function App() {
           <ProfileModal 
             employee={viewingEmp} 
             onClose={() => setViewingEmp(null)} 
-            onEdit={(emp, tab) => { setViewingEmp(null); setEditingEmp(emp); setEditTab(tab || 'personal'); }}
+            onEdit={(emp, tab) => { setViewingEmp(null); setEditingEmp(emp); setEditTab(tab || 'service'); }}
             onDelete={setDeletingEmp}
           />
         )}
@@ -329,7 +329,7 @@ export default function App() {
       <ToastContainer toasts={toasts} removeToast={removeToast} />
 
       {/* Print Summary Table (Only visible when printing) */}
-      <div className="hidden print:block p-8 bg-white text-black w-full">
+      <div className={`hidden print:block p-8 bg-white text-black w-full ${viewingEmp ? 'no-print' : ''}`}>
         <div className="text-center mb-8 border-b-2 border-black pb-4">
           <h1 className="text-3xl font-bold uppercase tracking-tighter">Government Employee Record System</h1>
           <p className="text-sm font-bold uppercase tracking-widest mt-1">Consolidated Personnel Summary Report</p>
