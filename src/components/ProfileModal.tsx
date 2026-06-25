@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Employee } from '../types/employee';
-import { Printer, Edit, Trash2, X, FileText, History, Users, ShieldCheck, MapPin, Phone, Mail, Calendar, Download, ArrowLeft, FileUp, Eye, ZoomIn } from 'lucide-react';
+import { Printer, Edit, Trash2, X, FileText, History, Users, ShieldCheck, MapPin, Phone, Mail, Calendar, Download, ArrowLeft, FileUp, Eye, ZoomIn, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { downloadFileFromDrive, getAccessToken } from '../services/googleDrive';
 
 interface Props {
   employee: Employee;
@@ -17,6 +18,32 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
   const [scale, setScale] = useState<number>(1);
   const [fitToWidth, setFitToWidth] = useState<boolean>(true);
   const [isModalFullScreen, setIsModalFullScreen] = useState<boolean>(true);
+
+  // Google Drive download state in ProfileModal
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+  const [driveError, setDriveError] = useState<string | null>(null);
+
+  const handleDownloadDriveFile = async (doc: any) => {
+    if (!doc.driveFileId) return;
+    setDownloadingFileId(doc.id);
+    setDriveError(null);
+    try {
+      const blob = await downloadFileFromDrive(doc.driveFileId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error("Failed to retrieve file", err);
+      setDriveError(`Failed to download from Google Drive: ${err.message || err}`);
+    } finally {
+      setDownloadingFileId(null);
+    }
+  };
 
   useEffect(() => {
     if (!fitToWidth) {
@@ -594,8 +621,8 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                     This is to certify that the employee named herein has rendered services in this Government Unit as itemized below in chronological sequence, supported by authorized appointments:
                   </p>
 
-                  {/* HIGH RESOLUTION GRID TABLE STYLE IN INSPIRED FROM ATTACHED IMAGE */}
-                  <div className="overflow-x-auto border border-slate-350 rounded-xl shadow-inner bg-slate-50 p-1">
+                  {/* HIGH RESOLUTION GRID TABLE STYLE IN INSPIRED FROM ATTACHED IMAGE (Visible on LG screens and print) */}
+                  <div className="hidden lg:block overflow-x-auto border border-slate-350 rounded-xl shadow-inner bg-slate-50 p-1 print:block">
                     <table className="w-full border-collapse border border-slate-300 text-[10px] leading-relaxed text-center min-w-[950px] bg-white">
                       <thead>
                         <tr className="bg-slate-100 text-slate-800 font-extrabold uppercase border-b border-slate-300">
@@ -669,6 +696,66 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                     </table>
                   </div>
 
+                  {/* MOBILE-OPTIMIZED CARD VIEW (Visible on mobile/tablet, hidden on LG/print) */}
+                  <div className="lg:hidden space-y-4 print:hidden">
+                    {employee.serviceRecords.map((rec, i) => (
+                      <div key={i} className="bg-slate-50 rounded-2xl p-4 border border-slate-200 shadow-sm relative">
+                        <div className="absolute top-4 right-4 bg-[var(--gold)] text-[var(--navy)] text-[10px] font-black uppercase px-2 py-1 rounded-lg">
+                          S.N. {i + 1}
+                        </div>
+                        <h4 className="font-sans font-bold text-slate-800 text-sm uppercase mb-2 pr-12">{rec.designation || 'Untitled Position'}</h4>
+                        
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">From</span>
+                            <span className="font-semibold text-slate-700">{rec.from || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">To</span>
+                            <span className="font-semibold text-slate-700">{rec.to || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">Status</span>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${
+                              rec.status.toLowerCase().includes('perm') 
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
+                                : 'bg-amber-50 text-amber-700 border border-amber-100'
+                            }`}>{rec.status}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">Salary</span>
+                            <span className="font-bold text-[var(--green)] font-mono">{rec.salary || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">Station</span>
+                            <span className="font-medium text-slate-600">{rec.station || '—'}</span>
+                          </div>
+                          <div>
+                            <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">Branch</span>
+                            <span className="font-bold text-slate-500">{rec.branch || '—'}</span>
+                          </div>
+                          {rec.lwop && (
+                            <div>
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">L/V W/O Pay</span>
+                              <span className="text-slate-600">{rec.lwop}</span>
+                            </div>
+                          )}
+                          {(rec.sepDate || rec.sepCause) && (
+                            <div className="col-span-2 border-t border-slate-200/50 pt-2 mt-1">
+                              <span className="text-[9px] font-black uppercase tracking-widest text-slate-450 block">Separation Detail</span>
+                              <span className="text-slate-600 font-medium">{rec.sepDate ? `${rec.sepDate} (${rec.sepCause || 'No cause'})` : rec.sepCause}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    {employee.serviceRecords.length === 0 && (
+                      <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-slate-400 italic text-sm">
+                        No service records found in official database.
+                      </div>
+                    )}
+                  </div>
+
 
                 </motion.div>
               )}
@@ -689,6 +776,13 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Official Personnel Scans & Dossier Attachments</p>
                     <div className="w-24 h-1 bg-[var(--gold)] mx-auto mt-4"></div>
                   </div>
+
+                  {driveError && (
+                    <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2">
+                      <X size={16} />
+                      {driveError}
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
                     {employee.pdsScan && (
@@ -729,7 +823,22 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                       <div key={doc.id} className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                         <div>
                           <div className="w-full h-48 bg-slate-100 rounded-xl mb-4 border border-slate-200 flex items-center justify-center overflow-hidden relative group">
-                            {doc.fileType.startsWith('image/') ? (
+                            {doc.driveFileId ? (
+                              <div className="flex flex-col items-center justify-center text-center p-4">
+                                <Cloud size={48} className="text-indigo-600 mb-2 animate-pulse" />
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Stored on Google Drive</span>
+                                {doc.driveWebViewLink && (
+                                  <a
+                                    href={doc.driveWebViewLink}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors"
+                                  >
+                                    <ExternalLink size={10} /> View in GDrive
+                                  </a>
+                                )}
+                              </div>
+                            ) : doc.fileType.startsWith('image/') ? (
                               <>
                                 <img src={doc.fileData} alt={doc.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
                                 <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
@@ -749,19 +858,54 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                             )}
                           </div>
                           
-                          <h3 className="font-sans font-black text-slate-800 text-base uppercase tracking-tight truncate mb-1">{doc.name}</h3>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <h3 className="font-sans font-black text-slate-800 text-base uppercase tracking-tight truncate">{doc.name}</h3>
+                            {doc.driveFileId && (
+                              <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shrink-0">
+                                <Cloud size={8} /> GDrive
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs text-slate-400 truncate mb-2">{doc.fileName}</p>
                         </div>
 
                         <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
-                          <span className="text-[10px] text-slate-400 font-mono text-[9px]">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}</span>
-                          <a
-                            href={doc.fileData}
-                            download={doc.fileName}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-[var(--gold)] text-[var(--navy)] hover:bg-opacity-90 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                          >
-                            <Download size={12} /> Download
-                          </a>
+                          <div className="flex flex-col">
+                            <span className="text-[10px] text-slate-400 font-mono text-[9px]">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}</span>
+                            {doc.driveFileId && (
+                              <span className="text-[9px] text-indigo-500 font-bold flex items-center gap-1 mt-0.5">
+                                <Cloud size={10} /> Cloud Secure
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {doc.driveFileId ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDownloadDriveFile(doc)}
+                                disabled={downloadingFileId === doc.id}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50"
+                              >
+                                {downloadingFileId === doc.id ? (
+                                  <>
+                                    <Loader2 size={12} className="animate-spin" /> Retrieving...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Download size={12} /> Retrieve
+                                  </>
+                                )}
+                              </button>
+                            ) : (
+                              <a
+                                href={doc.fileData}
+                                download={doc.fileName}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-[var(--gold)] text-[var(--navy)] hover:bg-opacity-90 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                              >
+                                <Download size={12} /> Download
+                              </a>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}

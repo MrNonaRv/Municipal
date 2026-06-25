@@ -33,8 +33,11 @@ export interface Attachment {
   name: string;
   fileName: string;
   fileType: string;
-  fileData: string; // Base64 Data URI
+  fileData: string; // Base64 Data URI (optional or fallback when not on drive)
   uploadedAt: string;
+  driveFileId?: string;
+  driveWebViewLink?: string;
+  driveWebContentLink?: string;
 }
 
 export interface Employee {

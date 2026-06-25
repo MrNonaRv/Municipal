@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Employee, Child, Education, Attachment } from '../types/employee';
 import ServiceRecordEditor from './ServiceRecordEditor';
 import { fileToBase64 } from '../utils/helpers';
-import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download } from 'lucide-react';
+import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { getAccessToken, uploadFileToDrive, downloadFileFromDrive } from '../services/googleDrive';
 
 interface Props {
   employee: Employee;
@@ -23,11 +24,30 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const isInitialMount = useRef(true);
 
+  // States for Google Drive Integration in EditModal
+  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
+  const [uploadDestination, setUploadDestination] = useState<'local' | 'drive'>('local');
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+
   // States for Scanned Documents Attachment
   const [newDocName, setNewDocName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Check Google Drive connection status
+  useEffect(() => {
+    getAccessToken().then(token => {
+      const connected = !!token;
+      setIsDriveConnected(connected);
+      if (connected) {
+        setUploadDestination('drive');
+      } else {
+        setUploadDestination('local');
+      }
+    });
+  }, [activeTab]);
 
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -42,29 +62,95 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     }
   };
 
-  const handleAddAttachment = () => {
-    if (!newDocName.trim() || !selectedFile || !selectedFileData) return;
+  const handleAddAttachment = async () => {
+    if (!newDocName.trim() || !selectedFile) return;
 
-    const newAttachment: Attachment = {
-      id: 'doc-' + Date.now(),
-      name: newDocName.trim(),
-      fileName: selectedFile.name,
-      fileType: selectedFile.type,
-      fileData: selectedFileData,
-      uploadedAt: new Date().toISOString()
-    };
+    if (uploadDestination === 'drive') {
+      setIsUploadingToDrive(true);
+      setError(null);
+      try {
+        const ext = selectedFile.name.split('.').pop() || 'png';
+        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+        // Auto-named format
+        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
 
-    setFormData(prev => ({
-      ...prev,
-      attachments: [...(prev.attachments || []), newAttachment]
-    }));
+        const driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
 
-    // Reset inputs
-    setNewDocName('');
-    setSelectedFile(null);
-    setSelectedFileData(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+        const newAttachment: Attachment = {
+          id: 'drive-' + driveResult.id,
+          name: newDocName.trim(),
+          fileName: driveResult.name,
+          fileType: selectedFile.type,
+          fileData: '', // On Google Drive
+          uploadedAt: new Date().toISOString(),
+          driveFileId: driveResult.id,
+          driveWebViewLink: driveResult.webViewLink,
+          driveWebContentLink: driveResult.webContentLink
+        };
+
+        setFormData(prev => ({
+          ...prev,
+          attachments: [...(prev.attachments || []), newAttachment]
+        }));
+
+        // Reset inputs
+        setNewDocName('');
+        setSelectedFile(null);
+        setSelectedFileData(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+      } catch (err: any) {
+        console.error("Google Drive Upload Failed", err);
+        setError(`Google Drive Upload Failed: ${err.message || err}`);
+      } finally {
+        setIsUploadingToDrive(false);
+      }
+    } else {
+      if (!selectedFileData) return;
+      const newAttachment: Attachment = {
+        id: 'doc-' + Date.now(),
+        name: newDocName.trim(),
+        fileName: selectedFile.name,
+        fileType: selectedFile.type,
+        fileData: selectedFileData,
+        uploadedAt: new Date().toISOString()
+      };
+
+      setFormData(prev => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), newAttachment]
+      }));
+
+      // Reset inputs
+      setNewDocName('');
+      setSelectedFile(null);
+      setSelectedFileData(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      setError(null);
+    }
+  };
+
+  const handleRetrieveAttachment = async (doc: Attachment) => {
+    if (!doc.driveFileId) return;
+    setDownloadingFileId(doc.id);
     setError(null);
+    try {
+      const blob = await downloadFileFromDrive(doc.driveFileId);
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = doc.fileName;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (err: any) {
+      console.error("Failed to retrieve file", err);
+      setError(`Failed to retrieve file from Google Drive: ${err.message || err}`);
+    } finally {
+      setDownloadingFileId(null);
+    }
   };
 
   const handleRemoveAttachment = (id: string) => {
@@ -394,12 +480,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                         <Plus size={16} className="text-[var(--gold)]" /> Upload Scanned Document
                       </h3>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
                         <div className="space-y-2">
                           <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Name / Label</label>
                           <input
                             type="text"
-                            placeholder="e.g. Birth Certificate, Diploma, Oath"
+                            placeholder="e.g. Birth Certificate, Diploma"
                             value={newDocName}
                             onChange={e => setNewDocName(e.target.value)}
                             className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white"
@@ -407,7 +493,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                         </div>
                         
                         <div className="space-y-2">
-                          <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document file (Image)</label>
+                          <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document (Image)</label>
                           <div className="flex gap-3">
                             <input
                               type="file"
@@ -426,16 +512,65 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                             </button>
                           </div>
                         </div>
+
+                        <div className="space-y-2">
+                          <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Storage Destination</label>
+                          <div className="flex gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => setUploadDestination('local')}
+                              className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all ${
+                                uploadDestination === 'local'
+                                  ? 'bg-slate-200 border-slate-300 text-slate-700'
+                                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+                              }`}
+                            >
+                              Local
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!isDriveConnected}
+                              onClick={() => setUploadDestination('drive')}
+                              className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
+                                !isDriveConnected
+                                  ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                  : uploadDestination === 'drive'
+                                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
+                                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+                              }`}
+                              title={!isDriveConnected ? "Connect Google Drive in the main dashboard first" : ""}
+                            >
+                              <Cloud size={10} />
+                              GDrive
+                            </button>
+                          </div>
+                        </div>
                       </div>
+
+                      {!isDriveConnected && (
+                        <p className="mt-2 text-[9px] text-amber-500 italic">💡 Connect Google Drive in the dashboard to enable automated cloud storage with automatic file naming.</p>
+                      )}
+                      {isDriveConnected && uploadDestination === 'drive' && (
+                        <p className="mt-2 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your Google Drive storage.</p>
+                      )}
                       
                       <div className="mt-4 flex justify-end">
                         <button
                           type="button"
                           onClick={handleAddAttachment}
-                          disabled={!newDocName.trim() || !selectedFileData}
+                          disabled={isUploadingToDrive || !newDocName.trim() || !selectedFile || (uploadDestination === 'local' && !selectedFileData)}
                           className="px-6 py-2 bg-[var(--gold)] text-[var(--navy)] text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-opacity-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
                         >
-                          <Plus size={14} /> Add Document
+                          {isUploadingToDrive ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              Uploading to Drive...
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={14} /> Add Document
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
@@ -451,28 +586,66 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                         <div key={doc.id} className="border border-slate-100 rounded-xl p-4 bg-white shadow-sm flex items-center justify-between gap-4">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="w-12 h-12 rounded-lg bg-indigo-50 flex items-center justify-center text-indigo-500 overflow-hidden shrink-0">
-                              {doc.fileType.startsWith('image/') ? (
+                              {doc.driveFileId ? (
+                                <Cloud size={24} className="text-indigo-600 animate-pulse" />
+                              ) : doc.fileType.startsWith('image/') ? (
                                 <img src={doc.fileData} alt={doc.name} className="w-full h-full object-cover" />
                               ) : (
                                 <FileText size={20} className="text-indigo-500" />
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-sm text-slate-800 truncate">{doc.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-bold text-sm text-slate-800 truncate">{doc.name}</p>
+                                {doc.driveFileId && (
+                                  <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shrink-0">
+                                    <Cloud size={8} /> GDrive
+                                  </span>
+                                )}
+                              </div>
                               <p className="text-[10px] text-slate-400 truncate mb-1">{doc.fileName}</p>
                               <p className="text-[9px] text-slate-400 font-mono">Uploaded: {new Date(doc.uploadedAt).toLocaleDateString()}</p>
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-2 shrink-0">
-                            <a
-                              href={doc.fileData}
-                              download={doc.fileName}
-                              className="p-2 text-slate-400 hover:text-[var(--navy)] hover:bg-slate-50 rounded-lg transition-colors"
-                              title="Download document"
-                            >
-                              <Download size={16} />
-                            </a>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {doc.driveFileId ? (
+                              <button
+                                type="button"
+                                onClick={() => handleRetrieveAttachment(doc)}
+                                disabled={downloadingFileId === doc.id}
+                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center justify-center"
+                                title="Download / retrieve from Google Drive"
+                              >
+                                {downloadingFileId === doc.id ? (
+                                  <Loader2 size={16} className="animate-spin text-indigo-600" />
+                                ) : (
+                                  <Download size={16} />
+                                )}
+                              </button>
+                            ) : (
+                              <a
+                                href={doc.fileData}
+                                download={doc.fileName}
+                                className="p-2 text-slate-400 hover:text-[var(--navy)] hover:bg-slate-50 rounded-lg transition-colors"
+                                title="Download document"
+                              >
+                                <Download size={16} />
+                              </a>
+                            )}
+                            
+                            {doc.driveWebViewLink && (
+                              <a
+                                href={doc.driveWebViewLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
+                                title="View on Google Drive in new tab"
+                              >
+                                <ExternalLink size={16} />
+                              </a>
+                            )}
+
                             <button
                               type="button"
                               onClick={() => handleRemoveAttachment(doc.id)}

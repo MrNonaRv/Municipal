@@ -65,63 +65,76 @@ async function saveDb() {
   }
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json({ limit: '50mb' }));
 
-  // Initialize DB
-  await loadDb();
+let dbLoaded = false;
+async function ensureDbLoaded() {
+  if (!dbLoaded) {
+    await loadDb();
+    dbLoaded = true;
+  }
+}
 
-  app.use(express.json({ limit: '50mb' }));
+// Middleware to lazily load DB on requests
+app.use(async (req, res, next) => {
+  if (req.path.startsWith('/api')) {
+    await ensureDbLoaded();
+  }
+  next();
+});
 
-  // API Routes
-  app.get('/api/employees', async (req, res) => {
-    try {
-      const records = Object.values(dbCache);
-      const employees = records.map(encryptedData => {
+// API Routes
+app.get('/api/employees', async (req, res) => {
+  try {
+    const records = Object.values(dbCache);
+    const employees = records.map(encryptedData => {
+      try {
+        return JSON.parse(decrypt(encryptedData));
+      } catch (e) {
+        // If decryption fails, maybe it's not encrypted yet? (for migration)
         try {
-          return JSON.parse(decrypt(encryptedData));
-        } catch (e) {
-          // If decryption fails, maybe it's not encrypted yet? (for migration)
-          try {
-            return JSON.parse(encryptedData);
-          } catch (e2) {
-            return null;
-          }
+          return JSON.parse(encryptedData);
+        } catch (e2) {
+          return null;
         }
-      }).filter(Boolean);
-      res.json(employees);
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Failed to fetch employees' });
-    }
-  });
-
-  app.post('/api/employees', async (req, res) => {
-    try {
-      const employee = req.body;
-      const encryptedData = encrypt(JSON.stringify(employee));
-      dbCache[employee.id] = encryptedData;
-      await saveDb();
-      res.json({ success: true });
-    } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Failed to save employee' });
-    }
-  });
-
-  app.delete('/api/employees/:id', async (req, res) => {
-    try {
-      const id = req.params.id;
-      if (dbCache[id]) {
-        delete dbCache[id];
-        await saveDb();
       }
-      res.json({ success: true });
-    } catch (error) {
-      res.status(500).json({ error: 'Failed to delete employee' });
+    }).filter(Boolean);
+    res.json(employees);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to fetch employees' });
+  }
+});
+
+app.post('/api/employees', async (req, res) => {
+  try {
+    const employee = req.body;
+    const encryptedData = encrypt(JSON.stringify(employee));
+    dbCache[employee.id] = encryptedData;
+    await saveDb();
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to save employee' });
+  }
+});
+
+app.delete('/api/employees/:id', async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (dbCache[id]) {
+      delete dbCache[id];
+      await saveDb();
     }
-  });
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete employee' });
+  }
+});
+
+async function startServer() {
+  const PORT = 3000;
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
@@ -143,4 +156,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
