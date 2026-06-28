@@ -237,11 +237,11 @@ export default function ServiceRecordEditor({ records, onChange }: Props) {
                     <td className="px-3 py-2 font-medium">{rec.designation}</td>
                     <td className="px-3 py-2">
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                        rec.status.includes('Perm') ? 'bg-green-100 text-green-800' : 
-                        rec.status.includes('Temp') ? 'bg-amber-100 text-amber-800' : 
+                        (rec.status || '').includes('Perm') ? 'bg-green-100 text-green-800' : 
+                        (rec.status || '').includes('Temp') ? 'bg-amber-100 text-amber-800' : 
                         'bg-gray-100 text-gray-800'
                       }`}>
-                        {rec.status}
+                        {rec.status || '—'}
                       </span>
                     </td>
                     <td className="px-3 py-2">{rec.salary}</td>
@@ -423,10 +423,10 @@ export default function ServiceRecordEditor({ records, onChange }: Props) {
                   <div>
                     <span className="text-[9px] font-black uppercase text-slate-400 block mb-0.5">Status</span>
                     <span className={`px-2 py-0.5 rounded text-[10px] font-bold inline-block ${
-                      rec.status.toLowerCase().includes('perm') 
+                      (rec.status || '').toLowerCase().includes('perm') 
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' 
                         : 'bg-amber-50 text-amber-700 border border-amber-100'
-                    }`}>{rec.status}</span>
+                    }`}>{rec.status || '—'}</span>
                   </div>
                   <div>
                     <span className="text-[9px] font-black uppercase text-slate-400 block mb-0.5">Station</span>

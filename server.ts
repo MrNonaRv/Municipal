@@ -36,7 +36,11 @@ function decrypt(text: string) {
 }
 
 // Low-dependency JSON Database
-const DB_FILE = path.join(process.cwd(), 'database.json');
+const IS_VERCEL = !!process.env.VERCEL;
+const DB_FILE = IS_VERCEL
+  ? path.join('/tmp', 'database.json')
+  : path.join(process.cwd(), 'database.json');
+
 interface DatabaseSchema {
   [id: string]: string;
 }
@@ -45,6 +49,22 @@ let dbCache: DatabaseSchema = {};
 
 async function loadDb() {
   try {
+    if (IS_VERCEL) {
+      // Check if file exists in /tmp. If not, copy it from working directory
+      try {
+        await fs.access(DB_FILE);
+      } catch (err) {
+        const sourcePath = path.join(process.cwd(), 'database.json');
+        try {
+          await fs.copyFile(sourcePath, DB_FILE);
+          console.log('Copied database.json to /tmp for Vercel write access');
+        } catch (copyErr) {
+          console.warn('Could not copy database.json to /tmp, initializing empty:', copyErr);
+          await fs.writeFile(DB_FILE, '{}', 'utf-8');
+        }
+      }
+    }
+
     const content = await fs.readFile(DB_FILE, 'utf-8');
     dbCache = JSON.parse(content);
   } catch (error: any) {

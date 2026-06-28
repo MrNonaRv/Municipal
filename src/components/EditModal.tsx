@@ -6,6 +6,19 @@ import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, A
 import { motion, AnimatePresence } from 'motion/react';
 import { getAccessToken, uploadFileToDrive, downloadFileFromDrive } from '../services/googleDrive';
 
+const DOCUMENT_TYPES = [
+  { value: 'Birth_Certificate', label: 'Birth Certificate' },
+  { value: 'Marriage_Certificate', label: 'Marriage Contract / Certificate' },
+  { value: 'Personal_Data_Sheet', label: 'Personal Data Sheet (PDS)' },
+  { value: 'Diploma_Transcript', label: 'Diploma & Transcript (TOR)' },
+  { value: 'Service_Record', label: 'Service Record' },
+  { value: 'Appointment_Paper', label: 'Appointment Paper' },
+  { value: 'Oath_of_Office', label: 'Oath of Office' },
+  { value: 'Training_Certificate', label: 'Training / Seminar Certificate' },
+  { value: 'Clearance', label: 'Clearance (NBI/Police/Medical)' },
+  { value: 'Other', label: 'Other / Custom Document' }
+];
+
 interface Props {
   employee: Employee;
   onClose: () => void;
@@ -31,10 +44,23 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   // States for Scanned Documents Attachment
-  const [newDocName, setNewDocName] = useState('');
+  const [selectedDocType, setSelectedDocType] = useState('Birth_Certificate');
+  const [newDocName, setNewDocName] = useState('Birth Certificate');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleDocTypeChange = (type: string) => {
+    setSelectedDocType(type);
+    if (type !== 'Other') {
+      const matched = DOCUMENT_TYPES.find(d => d.value === type);
+      if (matched) {
+        setNewDocName(matched.label);
+      }
+    } else {
+      setNewDocName('');
+    }
+  };
 
   // Check Google Drive connection status
   useEffect(() => {
@@ -65,17 +91,17 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handleAddAttachment = async () => {
     if (!newDocName.trim() || !selectedFile) return;
 
+    const ext = selectedFile.name.split('.').pop() || 'png';
+    const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+    const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+    const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+    // Standardized Auto-named format
+    const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
+
     if (uploadDestination === 'drive') {
       setIsUploadingToDrive(true);
       setError(null);
       try {
-        const ext = selectedFile.name.split('.').pop() || 'png';
-        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-        // Auto-named format
-        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
-
         const driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
 
         const newAttachment: Attachment = {
@@ -96,7 +122,8 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         }));
 
         // Reset inputs
-        setNewDocName('');
+        setSelectedDocType('Birth_Certificate');
+        setNewDocName('Birth Certificate');
         setSelectedFile(null);
         setSelectedFileData(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -111,7 +138,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       const newAttachment: Attachment = {
         id: 'doc-' + Date.now(),
         name: newDocName.trim(),
-        fileName: selectedFile.name,
+        fileName: autoFileName, // Use the same automatic file name for local storage
         fileType: selectedFile.type,
         fileData: selectedFileData,
         uploadedAt: new Date().toISOString()
@@ -123,7 +150,8 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       }));
 
       // Reset inputs
-      setNewDocName('');
+      setSelectedDocType('Birth_Certificate');
+      setNewDocName('Birth Certificate');
       setSelectedFile(null);
       setSelectedFileData(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -480,78 +508,116 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                         <Plus size={16} className="text-[var(--gold)]" /> Upload Scanned Document
                       </h3>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                        <div className="space-y-2">
-                          <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Name / Label</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Birth Certificate, Diploma"
-                            value={newDocName}
-                            onChange={e => setNewDocName(e.target.value)}
-                            className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white"
-                          />
-                        </div>
-                        
-                        <div className="space-y-2">
-                          <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document (Image)</label>
-                          <div className="flex gap-3">
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={handleAttachmentFileChange}
-                              ref={fileInputRef}
-                              className="hidden"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => fileInputRef.current?.click()}
-                              className="flex-1 px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-[var(--gold)] transition-colors text-xs text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2 bg-white truncate"
+                      <div className="space-y-4">
+                        {/* Row 1: Document Category and Label */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Type / Category</label>
+                            <select
+                              value={selectedDocType}
+                              onChange={e => handleDocTypeChange(e.target.value)}
+                              className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white h-10"
                             >
-                              <FileText size={16} className="shrink-0" />
-                              <span className="truncate">{selectedFile ? selectedFile.name : "Select Image file"}</span>
-                            </button>
+                              {DOCUMENT_TYPES.map(type => (
+                                <option key={type.value} value={type.value}>
+                                  {type.label}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          
+                          <div className="space-y-2">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Custom Name / Label</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. Birth Certificate, Diploma"
+                              value={newDocName}
+                              onChange={e => setNewDocName(e.target.value)}
+                              className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white h-10"
+                            />
                           </div>
                         </div>
 
-                        <div className="space-y-2">
-                          <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Storage Destination</label>
-                          <div className="flex gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => setUploadDestination('local')}
-                              className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all ${
-                                uploadDestination === 'local'
-                                  ? 'bg-slate-200 border-slate-300 text-slate-700'
-                                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
-                              }`}
-                            >
-                              Local
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!isDriveConnected}
-                              onClick={() => setUploadDestination('drive')}
-                              className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
-                                !isDriveConnected
-                                  ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-                                  : uploadDestination === 'drive'
-                                  ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
-                                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
-                              }`}
-                              title={!isDriveConnected ? "Connect Google Drive in the main dashboard first" : ""}
-                            >
-                              <Cloud size={10} />
-                              GDrive
-                            </button>
+                        {/* Row 2: File Selector and Destination */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document File</label>
+                            <div className="flex gap-3">
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleAttachmentFileChange}
+                                ref={fileInputRef}
+                                className="hidden"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => fileInputRef.current?.click()}
+                                className="w-full px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-[var(--gold)] transition-colors text-xs text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2 bg-white h-10 truncate"
+                              >
+                                <FileText size={16} className="shrink-0" />
+                                <span className="truncate">{selectedFile ? selectedFile.name : "Select Image/Scan File"}</span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Storage Destination</label>
+                            <div className="flex gap-1.5 h-10">
+                              <button
+                                type="button"
+                                onClick={() => setUploadDestination('local')}
+                                className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all ${
+                                  uploadDestination === 'local'
+                                    ? 'bg-slate-200 border-slate-300 text-slate-700'
+                                    : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+                                }`}
+                              >
+                                Local
+                              </button>
+                              <button
+                                type="button"
+                                disabled={!isDriveConnected}
+                                onClick={() => setUploadDestination('drive')}
+                                className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
+                                  !isDriveConnected
+                                    ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
+                                    : uploadDestination === 'drive'
+                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
+                                    : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
+                                }`}
+                                title={!isDriveConnected ? "Connect Google Drive in the main dashboard first" : ""}
+                              >
+                                <Cloud size={10} />
+                                GDrive
+                              </button>
+                            </div>
                           </div>
                         </div>
+
+                        {/* File Naming Preview Box */}
+                        {selectedFile && (
+                          <div className="bg-slate-100/80 border border-slate-200 rounded-xl p-3 mt-2 text-xs">
+                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">✨ Automatic Standardized Filename Preview:</span>
+                            <div className="font-mono text-[10px] text-indigo-600 font-bold break-all flex items-center gap-1.5 bg-white p-2 rounded-lg border border-slate-200">
+                              <FileText size={12} className="text-indigo-500 shrink-0" />
+                              {(() => {
+                                const ext = selectedFile.name.split('.').pop() || 'png';
+                                const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+                                const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+                                const sanitizedDoc = (newDocName || 'Doc').trim().replace(/[^a-zA-Z0-9]/g, '_');
+                                return `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_[timestamp].${ext}`;
+                              })()}
+                            </div>
+                          </div>
+                        )}
                       </div>
 
                       {!isDriveConnected && (
-                        <p className="mt-2 text-[9px] text-amber-500 italic">💡 Connect Google Drive in the dashboard to enable automated cloud storage with automatic file naming.</p>
+                        <p className="mt-3 text-[9px] text-amber-500 italic">💡 Connect Google Drive in the dashboard to enable automated cloud storage with automatic file naming.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'drive' && (
-                        <p className="mt-2 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your Google Drive storage.</p>
+                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your Google Drive storage.</p>
                       )}
                       
                       <div className="mt-4 flex justify-end">
