@@ -136,7 +136,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     } else {
       if (!selectedFileData) return;
       const newAttachment: Attachment = {
-        id: 'doc-' + Date.now(),
+        id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
         name: newDocName.trim(),
         fileName: autoFileName, // Use the same automatic file name for local storage
         fileType: selectedFile.type,

@@ -1,5 +1,4 @@
 import express from 'express';
-import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
@@ -39,7 +38,7 @@ function decrypt(text: string) {
 const IS_VERCEL = !!process.env.VERCEL;
 const DB_FILE = IS_VERCEL
   ? path.join('/tmp', 'database.json')
-  : path.join(process.cwd(), 'database.json');
+  : path.join(__dirname, 'database.json');
 
 interface DatabaseSchema {
   [id: string]: string;
@@ -47,25 +46,47 @@ interface DatabaseSchema {
 
 let dbCache: DatabaseSchema = {};
 
+async function findDatabaseJson() {
+  const candidates = [
+    path.join(__dirname, 'database.json'),
+    path.join(__dirname, '..', 'database.json'),
+    path.join(process.cwd(), 'database.json')
+  ];
+  for (const candidate of candidates) {
+    try {
+      await fs.access(candidate);
+      return candidate;
+    } catch (e) {}
+  }
+  return null;
+}
+
 async function loadDb() {
   try {
+    let content = '{}';
     if (IS_VERCEL) {
-      // Check if file exists in /tmp. If not, copy it from working directory
+      // Check if file exists in /tmp. If not, copy it from working directory/bundle location
       try {
         await fs.access(DB_FILE);
+        content = await fs.readFile(DB_FILE, 'utf-8');
       } catch (err) {
-        const sourcePath = path.join(process.cwd(), 'database.json');
-        try {
-          await fs.copyFile(sourcePath, DB_FILE);
-          console.log('Copied database.json to /tmp for Vercel write access');
-        } catch (copyErr) {
-          console.warn('Could not copy database.json to /tmp, initializing empty:', copyErr);
-          await fs.writeFile(DB_FILE, '{}', 'utf-8');
+        const sourcePath = await findDatabaseJson();
+        if (sourcePath) {
+          try {
+            content = await fs.readFile(sourcePath, 'utf-8');
+            await fs.writeFile(DB_FILE, content, 'utf-8');
+            console.log('Copied database.json to /tmp for Vercel write access');
+          } catch (copyErr) {
+            console.warn('Could not copy database.json to /tmp, initializing empty:', copyErr);
+          }
+        } else {
+          console.warn('Could not locate any source database.json, initializing empty');
         }
       }
+    } else {
+      const dbPath = await findDatabaseJson() || DB_FILE;
+      content = await fs.readFile(dbPath, 'utf-8');
     }
-
-    const content = await fs.readFile(DB_FILE, 'utf-8');
     dbCache = JSON.parse(content);
   } catch (error: any) {
     if (error.code === 'ENOENT') {
@@ -455,6 +476,7 @@ async function startServer() {
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

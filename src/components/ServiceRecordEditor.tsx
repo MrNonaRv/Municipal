@@ -14,7 +14,7 @@ export default function ServiceRecordEditor({ records, onChange }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const handleAdd = () => {
-    const newId = 'sr-' + Date.now().toString(36);
+    const newId = 'sr-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
     const newRecord: ServiceRecord = {
       id: newId, from: '', to: '', designation: '', status: 'Perm.',
       salary: '', station: '', branch: '', lwop: '', sepDate: '', sepCause: ''

@@ -158,7 +158,7 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
         
         // Ensure ID exists, generate one if not
         if (!emp.id) {
-          emp.id = 'EMP-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5);
+          emp.id = 'EMP-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
         }
         
         parsed.push(emp);
@@ -195,7 +195,7 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
       const processed = valid.map(item => ({
         ...generateEmptyEmployee(),
         ...item,
-        id: item.id || 'EMP-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 5)
+        id: item.id || 'EMP-' + Date.now().toString(36) + Math.random().toString(36).substring(2, 9)
       }));
       
       setPreviewData(processed);

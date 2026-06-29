@@ -1,4 +1,4 @@
-export const genId = () => 'EMP-' + Date.now().toString(36).toUpperCase();
+export const genId = () => 'EMP-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).substring(2, 9).toUpperCase();
 
 export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
