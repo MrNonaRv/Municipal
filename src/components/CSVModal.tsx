@@ -1,19 +1,24 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Employee } from '../types/employee';
 import { generateEmptyEmployee } from '../utils/helpers';
-import { Download, Upload, FileJson, FileSpreadsheet, CheckSquare, Square, X, Cloud, Key, Shield, HelpCircle, Check, Lock } from 'lucide-react';
+import { 
+  Download, Upload, FileJson, FileSpreadsheet, CheckSquare, Square, X, Cloud, 
+  Key, Shield, HelpCircle, Check, Lock, Clock, Trash2, Plus, Edit, UploadCloud, 
+  AlertTriangle, Calendar, Search, Filter
+} from 'lucide-react';
 import { checkDriveStatus, saveServiceAccountConfig, logout as unlinkDrive, GoogleDriveStatus } from '../services/googleDrive';
+import { getActivityLogs, clearActivityLogs, ActivityLog } from '../services/db';
 
 interface Props {
   onClose: () => void;
   onImport: (data: Employee[]) => Promise<void> | void;
   onClear?: () => Promise<void> | void;
   employees: Employee[];
-  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive';
+  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive' | 'logs';
 }
 
 export default function CSVModal({ onClose, onImport, onClear, employees, initialTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>(initialTab || 'bulk');
+  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'gdrive' | 'logs'>(initialTab || 'bulk');
   const [previewData, setPreviewData] = useState<Employee[]>([]);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
   const [isImporting, setIsImporting] = useState(false);
@@ -27,14 +32,33 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
   const [driveFolderId, setDriveFolderId] = useState('');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
+  // Activity Log State
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [logSearch, setLogSearch] = useState('');
+  const [logFilter, setLogFilter] = useState<'ALL' | 'ADD' | 'MODIFY' | 'DELETE' | 'IMPORT' | 'CLEAR'>('ALL');
+
   useEffect(() => {
-    checkDriveStatus().then(status => {
-      setDriveStatus(status);
-      if (status.connected && status.folderId) {
-        setDriveFolderId(status.folderId);
-      }
-    });
+    if (activeTab === 'gdrive') {
+      checkDriveStatus().then(status => {
+        setDriveStatus(status);
+        if (status.connected && status.folderId) {
+          setDriveFolderId(status.folderId);
+        }
+      });
+    } else if (activeTab === 'logs') {
+      setLogs(getActivityLogs());
+    }
   }, [activeTab]);
+
+  useEffect(() => {
+    const handleLogsChange = () => {
+      setLogs(getActivityLogs());
+    };
+    window.addEventListener('gers_activity_logs_change', handleLogsChange);
+    return () => {
+      window.removeEventListener('gers_activity_logs_change', handleLogsChange);
+    };
+  }, []);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -313,6 +337,16 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'gdrive' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
           >
             <Cloud size={16}/> Settings & Drive
+          </button>
+          <button 
+            role="tab" 
+            id="tab-logs"
+            aria-controls="panel-logs"
+            aria-selected={activeTab === 'logs'} 
+            onClick={() => setActiveTab('logs')} 
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'logs' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
+          >
+            <Clock size={16}/> Activity Log
           </button>
         </div>
 
@@ -598,27 +632,172 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                     Use this tool only when the database requires an absolute reset/re-import, or when fixing corrupted record formats.
                   </p>
                   <button
-                    type="button"
-                    onClick={async () => {
-                      if (confirm('⚠️ WARNING: Are you sure you want to clear ALL employee and record data from the system?\n\nThis will completely wipe local and cloud records. This action cannot be undone.')) {
-                        if (confirm('⚠️ DOUBLE CONFIRMATION REQUIRED:\n\nPlease confirm again to delete all data.')) {
-                          try {
-                            setError(null);
-                            if (onClear) {
-                              await onClear();
-                            }
-                          } catch (err: any) {
-                            setError(err instanceof Error ? err.message : 'Failed to clear system data');
-                          }
-                        }
-                      }
-                    }}
-                    className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                     type="button"
+                     onClick={async () => {
+                       if (confirm('⚠️ WARNING: Are you sure you want to clear ALL employee and record data from the system?\n\nThis will completely wipe local and cloud records. This action cannot be undone.')) {
+                         if (confirm('⚠️ DOUBLE CONFIRMATION REQUIRED:\n\nPlease confirm again to delete all data.')) {
+                           try {
+                             setError(null);
+                             if (onClear) {
+                               await onClear();
+                             }
+                           } catch (err: any) {
+                             setError(err instanceof Error ? err.message : 'Failed to clear system data');
+                           }
+                         }
+                       }
+                     }}
+                     className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-xs uppercase tracking-wider flex items-center justify-center gap-2"
                   >
                     Clear All System Data
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'logs' && (
+            <div className="space-y-6 font-sans">
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-bold text-[var(--navy)] flex items-center gap-2 text-sm">
+                      <Clock size={18} className="text-[var(--gold)]" />
+                      Dossier Action & Sync Activity Logs
+                    </h3>
+                    <p className="text-xs text-slate-600 leading-relaxed mt-1">
+                      Historical log of additions, modifications, and deletions made to personnel records and files.
+                    </p>
+                  </div>
+                  {logs.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (confirm('Are you sure you want to clear all activity log history? This will clear the visual log list.')) {
+                          clearActivityLogs();
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 hover:text-slate-900 transition-colors rounded text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shrink-0 self-start sm:self-center"
+                    >
+                      <Trash2 size={13} />
+                      Clear Logs
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Filters & Search */}
+              <div className="flex flex-col sm:flex-row gap-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    value={logSearch}
+                    onChange={(e) => setLogSearch(e.target.value)}
+                    placeholder="Search by employee name or log entry message..."
+                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs focus:ring-1 focus:ring-[var(--gold)] focus:border-[var(--gold)] outline-none"
+                  />
+                </div>
+                <div className="flex items-center gap-2 min-w-[150px]">
+                  <Filter size={14} className="text-slate-400" />
+                  <select
+                    value={logFilter}
+                    onChange={(e) => setLogFilter(e.target.value as any)}
+                    className="w-full p-2 border border-slate-200 rounded-lg text-xs bg-white outline-none focus:ring-1 focus:ring-[var(--gold)]"
+                  >
+                    <option value="ALL">All Actions</option>
+                    <option value="ADD">Additions</option>
+                    <option value="MODIFY">Modifications</option>
+                    <option value="DELETE">Deletions</option>
+                    <option value="IMPORT">Imports</option>
+                    <option value="CLEAR">Clears</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Logs List */}
+              {(() => {
+                const filteredLogs = logs.filter(log => {
+                  const matchesFilter = logFilter === 'ALL' || log.actionType === logFilter;
+                  const searchLower = logSearch.toLowerCase();
+                  const matchesSearch = 
+                    log.message.toLowerCase().includes(searchLower) ||
+                    (log.details?.employeeName && log.details.employeeName.toLowerCase().includes(searchLower)) ||
+                    (log.details?.changes && log.details.changes.some(c => c.toLowerCase().includes(searchLower)));
+                  return matchesFilter && matchesSearch;
+                });
+
+                const getIconForAction = (type: string) => {
+                  switch (type) {
+                    case 'ADD': return <Plus size={14} className="text-emerald-600" />;
+                    case 'MODIFY': return <Edit size={14} className="text-blue-600" />;
+                    case 'DELETE': return <Trash2 size={14} className="text-rose-600" />;
+                    case 'IMPORT': return <UploadCloud size={14} className="text-purple-600" />;
+                    case 'CLEAR': return <AlertTriangle size={14} className="text-amber-600" />;
+                    default: return <Clock size={14} className="text-slate-600" />;
+                  }
+                };
+
+                const getColorClasses = (type: string) => {
+                  switch (type) {
+                    case 'ADD': return 'border-l-emerald-500 bg-emerald-50/20';
+                    case 'MODIFY': return 'border-l-blue-500 bg-blue-50/20';
+                    case 'DELETE': return 'border-l-rose-500 bg-rose-50/20';
+                    case 'IMPORT': return 'border-l-purple-500 bg-purple-50/20';
+                    case 'CLEAR': return 'border-l-amber-500 bg-amber-50/20';
+                    default: return 'border-l-slate-400 bg-slate-50/30';
+                  }
+                };
+
+                if (filteredLogs.length === 0) {
+                  return (
+                    <div className="text-center py-12 bg-white border border-slate-200 rounded-lg shadow-sm">
+                      <Clock size={40} className="mx-auto mb-3 text-slate-300 animate-pulse" />
+                      <p className="text-sm font-medium text-slate-500">No activity logs found</p>
+                      <p className="text-xs text-slate-400 mt-1">Try adjusting your filters or record more data changes first.</p>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
+                    {filteredLogs.map(log => (
+                      <div 
+                        key={log.id} 
+                        className={`border border-slate-200 border-l-4 rounded-lg p-3.5 shadow-sm transition-all hover:shadow-md ${getColorClasses(log.actionType)}`}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div className="p-1.5 bg-white border border-slate-100 rounded-md shadow-sm mt-0.5">
+                            {getIconForAction(log.actionType)}
+                          </div>
+                          <div className="flex-1 space-y-1">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                              <h4 className="text-xs font-bold text-slate-800 font-sans">
+                                {log.message}
+                              </h4>
+                              <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1">
+                                <Calendar size={10} />
+                                {new Date(log.timestamp).toLocaleString()}
+                              </span>
+                            </div>
+
+                            {log.details?.changes && log.details.changes.length > 0 && (
+                              <div className="mt-2 pl-2 border-l border-slate-200 space-y-1">
+                                {log.details.changes.map((change, i) => (
+                                  <div key={i} className="text-[11px] text-slate-600 flex items-center gap-1.5 font-sans">
+                                    <span className="w-1 h-1 rounded-full bg-slate-400 shrink-0" />
+                                    <span>{change}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

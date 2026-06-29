@@ -75,13 +75,18 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       let file = e.target.files[0];
-      if (uploadDestination === 'local' && file.size > 700 * 1024 && !file.type.startsWith('image/')) {
-        setError("File must be smaller than 700KB for local storage. Please connect Google Drive for larger files.");
+      if (uploadDestination === 'local' && file.size > 2 * 1024 * 1024 && !file.type.startsWith('image/')) {
+        setError("File must be smaller than 2MB for local storage. Please connect Google Drive for larger files.");
         return;
       }
       try {
+        setError(null);
         if (file.type.startsWith('image/')) {
-          file = await convertImageToPDF(file, file.name);
+          try {
+            file = await convertImageToPDF(file, file.name);
+          } catch (pdfErr) {
+            console.warn("Failed to convert image to PDF, using original image file directly", pdfErr);
+          }
         }
         const base64 = await fileToBase64(file);
         setSelectedFile(file);
@@ -92,8 +97,9 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
           const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
           setNewDocName(baseName);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.error("File loading failed", err);
+        setError("File loading failed: " + (err instanceof Error ? err.message : String(err)));
       }
     }
   };
@@ -276,15 +282,17 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       let file = e.target.files[0];
-      if (file.size > 700 * 1024 && !file.type.startsWith('image/')) {
-        setError("File must be smaller than 700KB.");
+      if (file.size > 2 * 1024 * 1024) {
+        setError("Photo must be smaller than 2MB.");
         return;
       }
       try {
+        setError(null);
         const base64 = await fileToBase64(file);
         setFormData({ ...formData, photo: base64 });
-      } catch (err) {
+      } catch (err: any) {
         console.error("Photo upload failed", err);
+        setError("Photo upload failed: " + (err instanceof Error ? err.message : String(err)));
       }
     }
   };
@@ -292,18 +300,24 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handlePdsScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       let file = e.target.files[0];
-      if (file.size > 700 * 1024 && !file.type.startsWith('image/')) {
-        setError("PDS file must be smaller than 700KB. For larger files, please compress it first.");
+      if (file.size > 2 * 1024 * 1024 && !file.type.startsWith('image/')) {
+        setError("PDS file must be smaller than 2MB. For larger files, please compress it first.");
         return;
       }
       try {
+        setError(null);
         if (file.type.startsWith('image/')) {
-          file = await convertImageToPDF(file, file.name);
+          try {
+            file = await convertImageToPDF(file, file.name);
+          } catch (pdfErr) {
+            console.warn("Failed to convert PDS image to PDF, using original image file directly", pdfErr);
+          }
         }
         const base64 = await fileToBase64(file);
         setFormData({ ...formData, pdsScan: base64 });
-      } catch (err) {
+      } catch (err: any) {
         console.error("PDS Scan upload failed", err);
+        setError("PDS Scan upload failed: " + (err instanceof Error ? err.message : String(err)));
       }
     }
   };

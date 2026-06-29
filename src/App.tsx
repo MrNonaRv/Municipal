@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Employee } from './types/employee';
-import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll } from './services/db';
+import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll, addActivityLog } from './services/db';
 import { DEMO_EMPLOYEES } from './services/demoData';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
@@ -525,6 +525,15 @@ export default function App() {
             initialTab={csvModalTab}
             onClose={() => setIsCSVModalOpen(false)} 
             onImport={async (imported) => {
+              // Log the bulk import action
+              addActivityLog({
+                actionType: 'IMPORT',
+                message: `Bulk imported ${imported.length} employee records`,
+                details: {
+                  employeeName: 'System Bulk Action',
+                  changes: [`Imported ${imported.length} dossiers and initiated database updates.`]
+                }
+              });
               // Optimize: Parallel database writes
               await Promise.all(imported.map(emp => dbPut(emp)));
               await loadEmployees();

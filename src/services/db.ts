@@ -191,6 +191,149 @@ export const addSyncHistoryEvent = (event: Omit<SyncHistoryEvent, 'id' | 'timest
   window.dispatchEvent(new CustomEvent('gers_sync_history_change'));
 };
 
+// Activity Log Management
+export interface ActivityLog {
+  id: string;
+  timestamp: string;
+  actionType: 'ADD' | 'MODIFY' | 'DELETE' | 'IMPORT' | 'CLEAR';
+  message: string;
+  details?: {
+    employeeName: string;
+    changes?: string[];
+  };
+}
+
+const LOGS_KEY = 'gers_activity_logs';
+
+export const getActivityLogs = (): ActivityLog[] => {
+  try {
+    const data = localStorage.getItem(LOGS_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const addActivityLog = (log: Omit<ActivityLog, 'id' | 'timestamp'>) => {
+  const logs = getActivityLogs();
+  const newLog: ActivityLog = {
+    ...log,
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString()
+  };
+  logs.unshift(newLog);
+  // Keep only the last 100 logs
+  const trimmed = logs.slice(0, 100);
+  localStorage.setItem(LOGS_KEY, JSON.stringify(trimmed));
+  window.dispatchEvent(new CustomEvent('gers_activity_logs_change'));
+};
+
+export const clearActivityLogs = () => {
+  localStorage.removeItem(LOGS_KEY);
+  window.dispatchEvent(new CustomEvent('gers_activity_logs_change'));
+};
+
+export const compareEmployeeChanges = (oldEmp: Employee | undefined, newEmp: Employee) => {
+  const fullName = `${newEmp.firstName || ''} ${newEmp.surname || ''}`.trim() || 'Unnamed Employee';
+  if (!oldEmp) {
+    return {
+      actionType: 'ADD' as const,
+      message: `Created new employee dossier for ${fullName}`,
+      changes: ['Dossier created with initial information']
+    };
+  }
+
+  const changes: string[] = [];
+
+  // 1. Name Check
+  const oldName = `${oldEmp.firstName || ''} ${oldEmp.surname || ''}`.trim();
+  const newName = `${newEmp.firstName || ''} ${newEmp.surname || ''}`.trim();
+  if (oldName !== newName) {
+    changes.push(`Changed name from "${oldName || 'None'}" to "${newName}"`);
+  }
+
+  // 2. Photo Check
+  if (oldEmp.photo !== newEmp.photo) {
+    if (newEmp.photo) {
+      changes.push('Uploaded new profile photo');
+    } else {
+      changes.push('Removed profile photo');
+    }
+  }
+
+  // 3. PDS Scan Check
+  if (oldEmp.pdsScan !== newEmp.pdsScan) {
+    if (newEmp.pdsScan) {
+      changes.push('Uploaded/Updated scanned Personal Data Sheet (PDS)');
+    } else {
+      changes.push('Removed scanned Personal Data Sheet (PDS)');
+    }
+  }
+
+  // 4. Contact/Personal Details
+  if (oldEmp.email !== newEmp.email) changes.push(`Updated email address to "${newEmp.email || 'None'}"`);
+  if (oldEmp.cellphone !== newEmp.cellphone) changes.push(`Updated cellphone to "${newEmp.cellphone || 'None'}"`);
+  if (oldEmp.civilStatus !== newEmp.civilStatus) changes.push(`Updated civil status to "${newEmp.civilStatus || 'None'}"`);
+  if (oldEmp.residentialAddress !== newEmp.residentialAddress) changes.push(`Updated residential address`);
+  
+  // 5. Government ID Numbers
+  if (oldEmp.gsisNo !== newEmp.gsisNo) changes.push(`Updated GSIS ID number`);
+  if (oldEmp.pagibigNo !== newEmp.pagibigNo) changes.push(`Updated Pag-IBIG number`);
+  if (oldEmp.philhealthNo !== newEmp.philhealthNo) changes.push(`Updated PhilHealth number`);
+  if (oldEmp.sssNo !== newEmp.sssNo) changes.push(`Updated SSS number`);
+  if (oldEmp.tin !== newEmp.tin) changes.push(`Updated TIN number`);
+
+  // 6. Family check (Children)
+  const oldChildrenCount = oldEmp.children?.length || 0;
+  const newChildrenCount = newEmp.children?.length || 0;
+  if (oldChildrenCount !== newChildrenCount) {
+    changes.push(`Updated family details: changed children count from ${oldChildrenCount} to ${newChildrenCount}`);
+  }
+
+  // 7. Education Check
+  const oldEduCount = oldEmp.education?.length || 0;
+  const newEduCount = newEmp.education?.length || 0;
+  if (oldEduCount !== newEduCount) {
+    changes.push(`Updated education profile: changed records count from ${oldEduCount} to ${newEduCount}`);
+  }
+
+  // 8. Service Record Check
+  const oldSrvCount = oldEmp.serviceRecords?.length || 0;
+  const newSrvCount = newEmp.serviceRecords?.length || 0;
+  if (oldSrvCount !== newSrvCount) {
+    changes.push(`Updated service records: changed entries count from ${oldSrvCount} to ${newSrvCount}`);
+  }
+
+  // 9. Attachments Check
+  const oldAtts = oldEmp.attachments || [];
+  const newAtts = newEmp.attachments || [];
+  
+  // Find added/removed attachments
+  const oldIds = new Set(oldAtts.map(a => a.id));
+  const newIds = new Set(newAtts.map(a => a.id));
+  
+  const added = newAtts.filter(a => !oldIds.has(a.id));
+  const removed = oldAtts.filter(a => !newIds.has(a.id));
+
+  added.forEach(a => {
+    changes.push(`Uploaded document attachment: "${a.name}" (${a.fileName})`);
+  });
+  removed.forEach(a => {
+    changes.push(`Removed document attachment: "${a.name}"`);
+  });
+
+  // If there are no detectable fine-grained changes, add a generic edit statement
+  if (changes.length === 0) {
+    changes.push('Updated dossier details');
+  }
+
+  return {
+    actionType: 'MODIFY' as const,
+    message: `Modified employee dossier of ${fullName}`,
+    changes
+  };
+};
+
 // Flag to prevent overlapping sync operations
 let isSyncing = false;
 
@@ -414,6 +557,19 @@ export const dbPut = async (emp: Employee): Promise<void> => {
   // Update local cache immediately
   const cache = getLocalCache();
   const idx = cache.findIndex(e => e.id === emp.id);
+  const oldEmp = idx >= 0 ? cache[idx] : undefined;
+  
+  // Log the activity
+  const comparison = compareEmployeeChanges(oldEmp, emp);
+  addActivityLog({
+    actionType: comparison.actionType,
+    message: comparison.message,
+    details: {
+      employeeName: `${emp.firstName || ''} ${emp.surname || ''}`.trim() || 'Unnamed Employee',
+      changes: comparison.changes
+    }
+  });
+
   if (idx >= 0) {
     console.log(`[dbPut] Updating existing employee in local cache at index ${idx}.`);
     cache[idx] = emp;
@@ -466,8 +622,21 @@ export const dbPut = async (emp: Employee): Promise<void> => {
 export const dbDelete = async (id: string): Promise<void> => {
   console.log(`[dbDelete] Deleting employee ID=${id}.`);
   
+  const oldCache = getLocalCache();
+  const emp = oldCache.find(e => e.id === id);
+  const fullName = emp ? `${emp.firstName || ''} ${emp.surname || ''}`.trim() : 'Unknown Employee';
+  
+  addActivityLog({
+    actionType: 'DELETE',
+    message: `Deleted employee dossier for ${fullName}`,
+    details: {
+      employeeName: fullName,
+      changes: [`Completely removed employee profile and dossier data (ID: ${id})`]
+    }
+  });
+
   // Update local cache immediately
-  const cache = getLocalCache().filter(e => e.id !== id);
+  const cache = oldCache.filter(e => e.id !== id);
   console.log(`[dbDelete] Removed from local cache. New cache count: ${cache.length}`);
   saveLocalCache(cache);
 
@@ -512,6 +681,15 @@ export const dbDelete = async (id: string): Promise<void> => {
 export const dbClearAll = async (): Promise<void> => {
   console.log('[dbClearAll] Clearing all database cache and calling server wipe...');
   
+  addActivityLog({
+    actionType: 'CLEAR',
+    message: `Wiped entire personnel database`,
+    details: {
+      employeeName: 'System-wide Purge',
+      changes: ['Cleared all cached dossiers, pending updates, uploaded document attachments, and remote server databases.']
+    }
+  });
+
   // Clear local storage cache
   localStorage.removeItem(CACHE_KEY);
   localStorage.removeItem(QUEUE_KEY);
