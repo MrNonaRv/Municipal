@@ -69,7 +69,7 @@ function evaluateCondition(item: any, condition: any): boolean {
   if (condition && Array.isArray(condition.queryChunks)) {
     const columnChunk = condition.queryChunks.find((chunk: any) => chunk && chunk.table !== undefined && chunk.name !== undefined);
     if (columnChunk) columnName = columnChunk.name;
-    const paramChunk = condition.queryChunks.find((chunk: any) => chunk && chunk.constructor && chunk.constructor.name === 'Param');
+    const paramChunk = condition.queryChunks.find((chunk: any) => chunk && chunk.value !== undefined && chunk.table === undefined && !Array.isArray(chunk.value));
     if (paramChunk) value = paramChunk.value;
   }
   let itemKey = columnName;
@@ -77,7 +77,9 @@ function evaluateCondition(item: any, condition: any): boolean {
   else if (columnName === 'original_id') itemKey = 'originalId';
   else if (columnName === 'created_at') itemKey = 'createdAt';
   else if (columnName === 'uid') itemKey = 'uid';
-  return item[itemKey] === value;
+  
+  const itemVal = item[itemKey] !== undefined ? item[itemKey] : item[columnName];
+  return itemVal === value;
 }
 
 const selectBuilder = {
