@@ -94,7 +94,7 @@ export default function App() {
 
     const triggerSync = () => {
       if (getWorkMode() === 'local') return;
-      syncOfflineData((status, pendingCount) => {
+      syncOfflineData((status, pendingCount, retryData) => {
         setSyncQueueCount(pendingCount);
         if (status === 'syncing') {
           setIsSyncingState(true);
@@ -102,9 +102,13 @@ export default function App() {
           setIsSyncingState(false);
           addToast('All local changes synchronized with server!', 'success');
           loadEmployees();
+        } else if (status === 'retrying') {
+          setIsSyncingState(true);
+          const delaySecs = (retryData?.nextRetryDelay || 2000) / 1000;
+          addToast(`Sync failed. Retrying in ${delaySecs}s (Attempt ${retryData?.attempt}/5)...`, 'info');
         } else if (status === 'error') {
           setIsSyncingState(false);
-          addToast(`Failed to sync some changes (${pendingCount} pending)`, 'error');
+          addToast(`Failed to sync some changes (${pendingCount} pending).`, 'error');
         }
       });
     };
@@ -148,6 +152,7 @@ export default function App() {
     window.addEventListener('gers_data_synced', handleDataSynced);
     window.addEventListener('gers_work_mode_change', handleWorkModeChanged);
     window.addEventListener('gers_server_reachability_change', handleReachabilityChange);
+    window.addEventListener('gers_trigger_sync', triggerSync);
 
     // Periodic check to verify server reachability and trigger sync if back online
     const checkServerInterval = setInterval(async () => {
@@ -186,6 +191,7 @@ export default function App() {
       window.removeEventListener('gers_drive_status_changed', handleDriveStatusChanged);
       window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
       window.removeEventListener('gers_server_reachability_change', handleReachabilityChange);
+      window.removeEventListener('gers_trigger_sync', triggerSync);
     };
   }, []);
 

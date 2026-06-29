@@ -40,7 +40,7 @@ export const checkServerConnection = async (): Promise<boolean> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
       console.warn('[checkServerConnection] Connection check timed out after 10000ms.');
-      controller.abort();
+      controller.abort(new Error('timeout'));
     }, 10000);
     
     console.log('[checkServerConnection] Fetching /api/health...');
@@ -56,7 +56,7 @@ export const checkServerConnection = async (): Promise<boolean> => {
       const pendingCount = getSyncQueue().length;
       if (!wasReachable && pendingCount > 0) {
         console.log(`[checkServerConnection] Connection recovered and we have ${pendingCount} pending items. Triggering auto-sync.`);
-        syncOfflineData();
+        window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
       }
       return true;
     } else {
@@ -65,7 +65,11 @@ export const checkServerConnection = async (): Promise<boolean> => {
       return false;
     }
   } catch (e: any) {
-    console.error('[checkServerConnection] Connection check failed with error:', e);
+    if (e.name === 'AbortError' || e.message === 'timeout') {
+      console.warn('[checkServerConnection] Connection check failed due to timeout.');
+    } else {
+      console.error('[checkServerConnection] Connection check failed with error:', e);
+    }
     setServerReachable(false);
     return false;
   }
@@ -190,9 +194,22 @@ export const addSyncHistoryEvent = (event: Omit<SyncHistoryEvent, 'id' | 'timest
 // Flag to prevent overlapping sync operations
 let isSyncing = false;
 
+let syncRetryCount = 0;
+let syncRetryTimeout: NodeJS.Timeout | null = null;
+const MAX_RETRY_COUNT = 5;
+const BASE_RETRY_DELAY = 2000;
+
+export const resetSyncRetry = () => {
+  syncRetryCount = 0;
+  if (syncRetryTimeout) {
+    clearTimeout(syncRetryTimeout);
+    syncRetryTimeout = null;
+  }
+};
+
 // Sync function to process queue
 export const syncOfflineData = async (
-  onProgress?: (status: 'syncing' | 'success' | 'error', pendingCount: number) => void
+  onProgress?: (status: 'syncing' | 'success' | 'error' | 'retrying', pendingCount: number, retryData?: { attempt: number, nextRetryDelay: number }) => void
 ): Promise<void> => {
   const mode = getWorkMode();
   console.log(`[syncOfflineData] Starting sync. WorkMode: ${mode}, isSyncing: ${isSyncing}`);
@@ -206,6 +223,12 @@ export const syncOfflineData = async (
     console.warn('[syncOfflineData] Sync is already in progress. Aborting duplicate sync request.');
     return;
   }
+  
+  if (syncRetryTimeout) {
+    clearTimeout(syncRetryTimeout);
+    syncRetryTimeout = null;
+  }
+
   const queue = getSyncQueue();
   if (queue.length === 0) {
     console.log('[syncOfflineData] Sync queue is empty. Nothing to sync.');
@@ -286,8 +309,25 @@ export const syncOfflineData = async (
         type: 'SYNC_ERROR',
         message: `Sync finished with ${failedItems.length} failed items.`,
       });
-      if (onProgress) onProgress('error', failedItems.length);
+      
+      if (syncRetryCount < MAX_RETRY_COUNT) {
+        syncRetryCount++;
+        const delay = BASE_RETRY_DELAY * Math.pow(2, syncRetryCount - 1);
+        console.log(`[syncOfflineData] Scheduling retry ${syncRetryCount}/${MAX_RETRY_COUNT} in ${delay}ms`);
+        
+        if (onProgress) onProgress('retrying', failedItems.length, { attempt: syncRetryCount, nextRetryDelay: delay });
+        
+        if (syncRetryTimeout) clearTimeout(syncRetryTimeout);
+        syncRetryTimeout = setTimeout(() => {
+          syncOfflineData(onProgress);
+        }, delay);
+      } else {
+        console.error('[syncOfflineData] Max retry attempts reached. Stopping retries.');
+        if (onProgress) onProgress('error', failedItems.length);
+        resetSyncRetry();
+      }
     } else {
+      resetSyncRetry();
       console.log('[syncOfflineData] All items synced successfully! Fetching latest employees list to refresh cache...');
       addSyncHistoryEvent({
         type: 'SYNC_SUCCESS',
@@ -410,7 +450,7 @@ export const dbPut = async (emp: Employee): Promise<void> => {
     removeFromSyncQueue(emp.id);
     if (getSyncQueue().length > 0) {
       console.log('[dbPut] Sync queue has pending items. Triggering syncOfflineData.');
-      syncOfflineData();
+      window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
     }
   } catch (error: any) {
     console.warn(`[dbPut] Failed to save employee ${emp.id} to server. Saving offline to sync queue.`, error);
@@ -419,6 +459,7 @@ export const dbPut = async (emp: Employee): Promise<void> => {
       setServerReachable(false);
     }
     addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
+    window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
   }
 };
 
@@ -455,7 +496,7 @@ export const dbDelete = async (id: string): Promise<void> => {
     removeFromSyncQueue(id);
     if (getSyncQueue().length > 0) {
       console.log('[dbDelete] Sync queue has pending items. Triggering syncOfflineData.');
-      syncOfflineData();
+      window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
     }
   } catch (error: any) {
     console.warn(`[dbDelete] Failed to delete employee ${id} on server. Queueing offline delete.`, error);
@@ -464,6 +505,7 @@ export const dbDelete = async (id: string): Promise<void> => {
       setServerReachable(false);
     }
     addToSyncQueue({ id, type: 'DELETE' });
+    window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
   }
 };
 
