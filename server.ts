@@ -4,11 +4,20 @@ import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import initialDatabase from './database.json';
 
 dotenv.config();
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+let currentDirname = '';
+try {
+  currentDirname = __dirname;
+} catch (e) {
+  try {
+    currentDirname = path.dirname(fileURLToPath(import.meta.url));
+  } catch (e2) {
+    currentDirname = process.cwd();
+  }
+}
 
 const ENCRYPTION_KEY = process.env.DB_ENCRYPTION_KEY || 'default-32-char-key-for-local-dev-only-!!!';
 const ALGORITHM = 'aes-256-gcm';
@@ -38,7 +47,7 @@ function decrypt(text: string) {
 const IS_VERCEL = !!process.env.VERCEL;
 const DB_FILE = IS_VERCEL
   ? path.join('/tmp', 'database.json')
-  : path.join(__dirname, 'database.json');
+  : path.join(currentDirname, 'database.json');
 
 interface DatabaseSchema {
   [id: string]: string;
@@ -48,8 +57,8 @@ let dbCache: DatabaseSchema = {};
 
 async function findDatabaseJson() {
   const candidates = [
-    path.join(__dirname, 'database.json'),
-    path.join(__dirname, '..', 'database.json'),
+    path.join(currentDirname, 'database.json'),
+    path.join(currentDirname, '..', 'database.json'),
     path.join(process.cwd(), 'database.json')
   ];
   for (const candidate of candidates) {
@@ -63,9 +72,8 @@ async function findDatabaseJson() {
 
 async function loadDb() {
   try {
-    let content = '{}';
+    let content = '';
     if (IS_VERCEL) {
-      // Check if file exists in /tmp. If not, copy it from working directory/bundle location
       try {
         await fs.access(DB_FILE);
         content = await fs.readFile(DB_FILE, 'utf-8');
@@ -74,27 +82,28 @@ async function loadDb() {
         if (sourcePath) {
           try {
             content = await fs.readFile(sourcePath, 'utf-8');
-            await fs.writeFile(DB_FILE, content, 'utf-8');
-            console.log('Copied database.json to /tmp for Vercel write access');
-          } catch (copyErr) {
-            console.warn('Could not copy database.json to /tmp, initializing empty:', copyErr);
+          } catch (readErr) {
+            content = JSON.stringify(initialDatabase);
           }
         } else {
-          console.warn('Could not locate any source database.json, initializing empty');
+          content = JSON.stringify(initialDatabase);
         }
+        await fs.writeFile(DB_FILE, content, 'utf-8');
+        console.log('Initialized database.json in /tmp');
       }
     } else {
-      const dbPath = await findDatabaseJson() || DB_FILE;
-      content = await fs.readFile(dbPath, 'utf-8');
+      try {
+        const dbPath = await findDatabaseJson() || DB_FILE;
+        content = await fs.readFile(dbPath, 'utf-8');
+      } catch (err) {
+        content = JSON.stringify(initialDatabase);
+        await fs.writeFile(DB_FILE, content, 'utf-8');
+      }
     }
-    dbCache = JSON.parse(content);
+    dbCache = JSON.parse(content || '{}');
   } catch (error: any) {
-    if (error.code === 'ENOENT') {
-      dbCache = {};
-      await saveDb();
-    } else {
-      console.error('Failed to load JSON database:', error);
-    }
+    console.error('Failed to load JSON database:', error);
+    dbCache = { ...initialDatabase } as any;
   }
 }
 
