@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import initialDatabase from './database.json';
 
 dotenv.config();
@@ -70,7 +72,45 @@ async function findDatabaseJson() {
   return null;
 }
 
+let firebaseApp: any = null;
+let firestoreDb: any = null;
+
+async function initFirebase() {
+  try {
+    let configRaw = '';
+    const configPaths = [
+      path.join(currentDirname, 'firebase-applet-config.json'),
+      path.join(currentDirname, '..', 'firebase-applet-config.json'),
+      path.join(process.cwd(), 'firebase-applet-config.json')
+    ];
+    for (const p of configPaths) {
+      try {
+        configRaw = await fs.readFile(p, 'utf-8');
+        if (configRaw) break;
+      } catch (e) {}
+    }
+    if (configRaw) {
+      const config = JSON.parse(configRaw);
+      if (config && config.projectId) {
+        console.log('[Firebase] Initializing Firebase client SDK with Project ID:', config.projectId);
+        firebaseApp = initializeApp(config);
+        const dbId = config.firestoreDatabaseId || '(default)';
+        console.log('[Firebase] Initializing Firestore with Database ID:', dbId);
+        firestoreDb = getFirestore(firebaseApp, dbId);
+        return true;
+      }
+    }
+  } catch (err) {
+    console.warn('[Firebase] Failed to initialize Firebase:', err);
+  }
+  return false;
+}
+
 async function loadDb() {
+  // First, initialize Firebase if possible
+  await initFirebase();
+
+  // Load from local file first as primary or fallback
   try {
     let content = '';
     if (IS_VERCEL) {
@@ -104,6 +144,37 @@ async function loadDb() {
   } catch (error: any) {
     console.error('Failed to load JSON database:', error);
     dbCache = { ...initialDatabase } as any;
+  }
+
+  // Now, try loading from Firestore (if initialized)
+  if (firestoreDb) {
+    try {
+      console.log('[Firebase] Loading records from Firestore "app_data" collection...');
+      const querySnapshot = await getDocs(collection(firestoreDb, 'app_data'));
+      if (!querySnapshot.empty) {
+        const firestoreCache: DatabaseSchema = {};
+        querySnapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data && typeof data.value === 'string') {
+            firestoreCache[docSnap.id] = data.value;
+          }
+        });
+        // Merge Firestore records into dbCache (Firestore is master)
+        dbCache = { ...dbCache, ...firestoreCache };
+        console.log(`[Firebase] Successfully loaded and merged ${querySnapshot.size} records from Firestore.`);
+      } else {
+        console.log('[Firebase] Firestore "app_data" collection is empty. Seeding Firestore with initial database...');
+        // If Firestore is empty, seed it with the current dbCache records so they are saved to Firestore!
+        for (const [key, val] of Object.entries(dbCache)) {
+          if (typeof val === 'string') {
+            await setDoc(doc(firestoreDb, 'app_data', key), { value: val });
+          }
+        }
+        console.log('[Firebase] Successfully seeded Firestore with initial records.');
+      }
+    } catch (err) {
+      console.error('[Firebase] Failed to load/sync from Firestore:', err);
+    }
   }
 }
 
@@ -300,6 +371,15 @@ app.post('/api/drive/config', async (req, res) => {
     dbCache['google_drive_config'] = encryptedData;
     await saveDb();
 
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'app_data', 'google_drive_config'), { value: encryptedData });
+        console.log('[Firebase] Synchronized Google Drive configuration to Firestore.');
+      } catch (fsErr) {
+        console.error('[Firebase] Failed to write Google Drive config to Firestore:', fsErr);
+      }
+    }
+
     res.json({
       success: true,
       connected: true,
@@ -318,6 +398,14 @@ app.post('/api/drive/disconnect', async (req, res) => {
     if (dbCache['google_drive_config']) {
       delete dbCache['google_drive_config'];
       await saveDb();
+    }
+    if (firestoreDb) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'app_data', 'google_drive_config'));
+        console.log('[Firebase] Synchronized Google Drive disconnection to Firestore.');
+      } catch (fsErr) {
+        console.error('[Firebase] Failed to delete Google Drive config from Firestore:', fsErr);
+      }
     }
     res.json({ success: true, connected: false });
   } catch (error) {
@@ -460,6 +548,16 @@ app.post('/api/employees', async (req, res) => {
     const encryptedData = encrypt(JSON.stringify(employee));
     dbCache[employee.id] = encryptedData;
     await saveDb();
+
+    if (firestoreDb) {
+      try {
+        await setDoc(doc(firestoreDb, 'app_data', employee.id), { value: encryptedData });
+        console.log(`[Firebase] Synchronized employee ID=${employee.id} to Firestore.`);
+      } catch (fsErr) {
+        console.error(`[Firebase] Failed to write employee ID=${employee.id} to Firestore:`, fsErr);
+      }
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error(error);
@@ -474,6 +572,16 @@ app.delete('/api/employees/:id', async (req, res) => {
       delete dbCache[id];
       await saveDb();
     }
+
+    if (firestoreDb) {
+      try {
+        await deleteDoc(doc(firestoreDb, 'app_data', id));
+        console.log(`[Firebase] Synchronized deletion of employee ID=${id} to Firestore.`);
+      } catch (fsErr) {
+        console.error(`[Firebase] Failed to delete employee ID=${id} from Firestore:`, fsErr);
+      }
+    }
+
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete employee' });

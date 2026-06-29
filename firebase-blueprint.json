@@ -1,0 +1,22 @@
+{
+  "entities": {
+    "AppData": {
+      "title": "Application Data",
+      "description": "Encrypted application key-value data including employee records and google drive configs.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "The AES-256 encrypted string containing the record details."
+        }
+      },
+      "required": ["value"]
+    }
+  },
+  "firestore": {
+    "app_data/{id}": {
+      "schema": "AppData",
+      "description": "Store encrypted employee records and configuration data."
+    }
+  }
+}

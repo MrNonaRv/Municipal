@@ -789,17 +789,37 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                       <div className="border border-slate-200 rounded-2xl p-5 bg-white shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
                         <div>
                           <div className="w-full h-48 bg-slate-100 rounded-xl mb-4 border border-slate-200 flex items-center justify-center overflow-hidden relative group">
-                            <img src={employee.pdsScan} alt="Personal Data Sheet Scan" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <button
-                                onClick={() => setIsFullScreenPds(true)}
-                                type="button"
-                                className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110"
-                                title="View full PDS scan"
-                              >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>
-                              </button>
-                            </div>
+                            {employee.pdsScan.startsWith('data:image/') ? (
+                              <>
+                                <img src={employee.pdsScan} alt="Personal Data Sheet Scan" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <button
+                                    onClick={() => setIsFullScreenPds(true)}
+                                    type="button"
+                                    className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110"
+                                    title="View full PDS scan"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>
+                                  </button>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full text-indigo-500 relative group">
+                                <FileText size={48} className="text-indigo-400 mb-2" />
+                                <span className="text-[10px] font-bold uppercase">PDF Document</span>
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                  <a
+                                    href={employee.pdsScan}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110"
+                                    title="View PDF"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>
+                                  </a>
+                                </div>
+                              </div>
+                            )}
                           </div>
                           
                           <h3 className="font-sans font-black text-slate-800 text-base uppercase tracking-tight truncate mb-1">Personal Data Sheet (PDS)</h3>
@@ -1041,7 +1061,15 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
           <div className="p-4 flex flex-col items-center justify-center min-h-screen text-center" style={{ pageBreakBefore: 'always', breakBefore: 'page' }}>
             <h3 className="text-xs font-bold uppercase tracking-wider mb-1 text-slate-700">Scanned Personal Data Sheet (PDS)</h3>
             <p className="text-[9px] text-slate-400 mb-4">Official Document Scan of {employee.firstName} {employee.surname}</p>
-            <img src={employee.pdsScan} alt="PDS Scan Image" className="max-w-full max-h-[85vh] object-contain border border-slate-300 shadow-sm" />
+            {employee.pdsScan.startsWith('data:image/') ? (
+              <img src={employee.pdsScan} alt="PDS Scan Image" className="max-w-full max-h-[85vh] object-contain border border-slate-300 shadow-sm" />
+            ) : (
+              <div className="p-12 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center text-slate-400 bg-slate-50">
+                <FileText size={48} className="mb-4 text-slate-300" />
+                <span className="font-bold uppercase tracking-wider text-sm">PDF Document Attached</span>
+                <span className="text-[10px] mt-2">Open the application to view the full PDF.</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1077,10 +1105,10 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
               <div className="flex items-center gap-3">
                 <a
                   href={employee.pdsScan}
-                  download={`${employee.surname}_PDS_Scan.png`}
+                  download={employee.pdsScan.startsWith('data:image/') ? `${employee.surname}_PDS_Scan.png` : `${employee.surname}_PDS_Scan.pdf`}
                   className="flex items-center gap-2 px-5 py-2.5 bg-[var(--gold)] text-[var(--navy)] rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-opacity-95 transition-all shadow-md shadow-gold/10"
                 >
-                  <Download size={14} /> Download Image
+                  <Download size={14} /> Download
                 </a>
                 <button
                   onClick={() => setIsFullScreenPds(false)}
@@ -1093,12 +1121,20 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
             </div>
 
             <div className="flex-1 w-full flex items-center justify-center p-4 min-h-0 overflow-auto">
-              <img 
-                src={employee.pdsScan} 
-                alt="Full size Personal Data Sheet scan" 
-                className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-white/10"
-                referrerPolicy="no-referrer"
-              />
+              {employee.pdsScan.startsWith('data:image/') ? (
+                <img 
+                  src={employee.pdsScan} 
+                  alt="Full size Personal Data Sheet scan" 
+                  className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-white/10"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <iframe 
+                  src={employee.pdsScan} 
+                  title="Full size Personal Data Sheet scan" 
+                  className="w-full h-[85vh] rounded-xl shadow-2xl border border-white/10"
+                />
+              )}
             </div>
             
             <div className="text-center text-[10px] font-mono text-slate-500 uppercase tracking-wider select-none">

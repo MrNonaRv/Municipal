@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Employee, Child, Education, Attachment } from '../types/employee';
 import ServiceRecordEditor from './ServiceRecordEditor';
 import { fileToBase64 } from '../utils/helpers';
+import { convertImageToPDF } from '../utils/pdfHelpers';
 import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getAccessToken, uploadFileToDrive, downloadFileFromDrive } from '../services/googleDrive';
@@ -77,8 +78,11 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
 
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
+      let file = e.target.files[0];
       try {
+        if (file.type.startsWith('image/')) {
+          file = await convertImageToPDF(file, file.name);
+        }
         const base64 = await fileToBase64(file);
         setSelectedFile(file);
         setSelectedFileData(base64);
@@ -280,8 +284,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
 
   const handlePdsScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      let file = e.target.files[0];
       try {
-        const base64 = await fileToBase64(e.target.files[0]);
+        if (file.type.startsWith('image/')) {
+          file = await convertImageToPDF(file, file.name);
+        }
+        const base64 = await fileToBase64(file);
         setFormData({ ...formData, pdsScan: base64 });
       } catch (err) {
         console.error("PDS Scan upload failed", err);
@@ -468,7 +476,14 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                         </h3>
                         <div className="w-full h-48 bg-slate-100 rounded-xl mb-4 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden relative group">
                           {formData.pdsScan ? (
-                            <img src={formData.pdsScan} alt="PDS Scan" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            formData.pdsScan.startsWith('data:image/') ? (
+                              <img src={formData.pdsScan} alt="PDS Scan" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                            ) : (
+                              <div className="flex flex-col items-center justify-center h-full text-indigo-500">
+                                <FileText size={48} className="text-indigo-400 mb-2" />
+                                <span className="text-[10px] font-bold uppercase">PDF Document</span>
+                              </div>
+                            )
                           ) : (
                             <div className="flex flex-col items-center text-slate-300 text-center p-4">
                               <FileUp className="text-slate-300 mb-2" size={32} />
@@ -478,7 +493,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                           <label className="absolute inset-0 bg-slate-900/60 backdrop-blur-[2px] flex flex-col items-center justify-center text-white opacity-0 group-hover:opacity-100 cursor-pointer transition-all duration-300 select-none">
                             <FileUp size={24} className="mb-1" />
                             <span className="text-[10px] font-bold uppercase tracking-wider text-center px-4">Upload Official PDS Scan Image</span>
-                            <input type="file" accept="image/*" className="hidden" onChange={handlePdsScanUpload} />
+                            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handlePdsScanUpload} />
                           </label>
                         </div>
                       </div>
