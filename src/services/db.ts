@@ -153,6 +153,40 @@ export const removeFromSyncQueue = (id: string): void => {
   window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
 };
 
+// Sync History Management
+export interface SyncHistoryEvent {
+  id: string;
+  timestamp: string;
+  type: 'SYNC_START' | 'SYNC_SUCCESS' | 'SYNC_ERROR' | 'SYNC_ITEM_SUCCESS' | 'SYNC_ITEM_ERROR' | 'ONLINE_STATUS_CHANGE' | 'WORK_MODE_CHANGE';
+  message: string;
+  details?: any;
+}
+
+const HISTORY_KEY = 'gers_sync_history';
+
+export const getSyncHistory = (): SyncHistoryEvent[] => {
+  try {
+    const data = localStorage.getItem(HISTORY_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    return [];
+  }
+};
+
+export const addSyncHistoryEvent = (event: Omit<SyncHistoryEvent, 'id' | 'timestamp'>) => {
+  const history = getSyncHistory();
+  const newEvent: SyncHistoryEvent = {
+    ...event,
+    id: crypto.randomUUID(),
+    timestamp: new Date().toISOString()
+  };
+  history.unshift(newEvent); // Add to beginning
+  // Keep only last 20 events to avoid unbounded growth
+  const trimmed = history.slice(0, 20);
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
+  window.dispatchEvent(new CustomEvent('gers_sync_history_change'));
+};
+
 // Flag to prevent overlapping sync operations
 let isSyncing = false;
 
@@ -181,6 +215,11 @@ export const syncOfflineData = async (
 
   isSyncing = true;
   if (onProgress) onProgress('syncing', queue.length);
+  
+  addSyncHistoryEvent({
+    type: 'SYNC_START',
+    message: `Started syncing ${queue.length} items.`,
+  });
 
   try {
     const sortedQueue = [...queue].sort((a, b) => a.timestamp - b.timestamp);
@@ -217,9 +256,18 @@ export const syncOfflineData = async (
           if (!response.ok) throw new Error(`Server returned error status: ${response.status}`);
         }
         console.log(`[syncOfflineData] Successfully synced item ${item.id}`);
+        addSyncHistoryEvent({
+          type: 'SYNC_ITEM_SUCCESS',
+          message: `Successfully synced item: ${item.type} for ${item.id}`,
+        });
       } catch (err: any) {
         console.error(`[syncOfflineData] Failed to sync item ${item.id}:`, err);
         failedItems.push(item);
+        addSyncHistoryEvent({
+          type: 'SYNC_ITEM_ERROR',
+          message: `Failed to sync item: ${item.type} for ${item.id}`,
+          details: err.message
+        });
         if (mode === 'auto') {
           connectionDropped = true;
           setServerReachable(false);
@@ -234,9 +282,17 @@ export const syncOfflineData = async (
 
     if (failedItems.length > 0) {
       console.error(`[syncOfflineData] Sync finished with errors. ${failedItems.length} items remain in queue.`);
+      addSyncHistoryEvent({
+        type: 'SYNC_ERROR',
+        message: `Sync finished with ${failedItems.length} failed items.`,
+      });
       if (onProgress) onProgress('error', failedItems.length);
     } else {
       console.log('[syncOfflineData] All items synced successfully! Fetching latest employees list to refresh cache...');
+      addSyncHistoryEvent({
+        type: 'SYNC_SUCCESS',
+        message: 'All items synchronized successfully.',
+      });
       if (onProgress) onProgress('success', 0);
       try {
         const latestResponse = await fetch('/api/employees');

@@ -47,9 +47,14 @@ function decrypt(text: string) {
 
 // Low-dependency JSON Database
 const IS_VERCEL = !!process.env.VERCEL;
-const DB_FILE = IS_VERCEL
-  ? path.join('/tmp', 'database.json')
-  : path.join(currentDirname, 'database.json');
+
+let dbFilePath = '';
+if (IS_VERCEL) {
+  dbFilePath = path.join('/tmp', 'database.json');
+} else {
+  dbFilePath = path.join(currentDirname, 'database.json');
+}
+const DB_FILE = dbFilePath;
 
 interface DatabaseSchema {
   [id: string]: string;
@@ -217,19 +222,6 @@ async function saveDb() {
 
 const app = express();
 
-// Normalize req.url for Vercel serverless deployments
-app.use((req, res, next) => {
-  const originalUrl = req.url;
-  if (!req.url.startsWith('/api') && req.url !== '/' && !req.url.startsWith('/_')) {
-    // If Vercel stripped the '/api' prefix, prepend it so Express route matching succeeds
-    req.url = '/api' + req.url;
-    console.log(`[Vercel Route Normalizer] Normalized URL: ${originalUrl} -> ${req.url}`);
-  } else {
-    console.log(`[Route Monitor] Request: ${req.method} ${req.url}`);
-  }
-  next();
-});
-
 app.use(express.json({ limit: '50mb' }));
 
 let dbLoaded = false;
@@ -242,7 +234,10 @@ async function ensureDbLoaded() {
 
 // Middleware to lazily load DB on requests
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/api') && req.path !== '/api/health') {
+  const isApi = req.url.startsWith('/api') || (req.route && req.route.path.startsWith('/api'));
+  const isHealth = req.url === '/api/health' || req.url === '/health' || req.url.startsWith('/api/health?');
+  
+  if (isApi && !isHealth) {
     await ensureDbLoaded();
   }
   next();
@@ -250,6 +245,10 @@ app.use(async (req, res, next) => {
 
 // API Routes
 app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
@@ -705,7 +704,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    const distPath = currentDirname.endsWith('dist') ? currentDirname : path.join(currentDirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -714,6 +713,25 @@ async function startServer() {
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Automatically open browser if running locally (not in Vercel)
+    if (!process.env.VERCEL && process.env.NODE_ENV === 'production') {
+      try {
+        const { exec } = require('child_process');
+        const os = require('os');
+        const url = `http://localhost:${PORT}`;
+        const platform = os.platform();
+        if (platform === 'win32') {
+          exec(`start ${url}`);
+        } else if (platform === 'darwin') {
+          exec(`open ${url}`);
+        } else {
+          exec(`xdg-open ${url}`);
+        }
+      } catch (err) {
+        console.error('Could not open browser automatically:', err);
+      }
+    }
   });
 }
 

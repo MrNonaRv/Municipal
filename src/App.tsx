@@ -9,8 +9,9 @@ import EditModal from './components/EditModal';
 import CSVModal from './components/CSVModal';
 import ToastContainer from './components/Toast';
 import ConfirmModal from './components/ConfirmModal';
+import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
-import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { googleSignIn, logout, getAccessToken, initAuth } from './services/googleDrive';
 
@@ -18,6 +19,7 @@ export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [showSyncHistory, setShowSyncHistory] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -314,6 +316,14 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 sm:gap-3 w-full md:w-auto justify-end flex-wrap sm:flex-nowrap">
             <button
+              onClick={() => setShowSyncHistory(true)}
+              aria-label="View Sync History"
+              className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium transition-all hover:scale-105 active:scale-95 flex-1 sm:flex-initial justify-center bg-[var(--navy-light)] hover:bg-[var(--navy-lighter)] border-white/10 text-white"
+            >
+              <Activity size={16} className="text-blue-400" />
+              <span className="hidden sm:inline">Sync Log</span>
+            </button>
+            <button
               onClick={handleConnectDrive}
               disabled={isDriveConnecting}
               aria-label="Link Google Drive Storage"
@@ -532,6 +542,10 @@ export default function App() {
             onCancel={() => setDeletingEmp(null)}
             isLoading={isDeleting}
           />
+        )}
+        
+        {showSyncHistory && (
+          <SyncHistoryModal onClose={() => setShowSyncHistory(false)} />
         )}
       </AnimatePresence>
 
