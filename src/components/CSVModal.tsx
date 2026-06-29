@@ -7,11 +7,12 @@ import { checkDriveStatus, saveServiceAccountConfig, logout as unlinkDrive, Goog
 interface Props {
   onClose: () => void;
   onImport: (data: Employee[]) => Promise<void> | void;
+  onClear?: () => Promise<void> | void;
   employees: Employee[];
   initialTab?: 'bulk' | 'single' | 'export' | 'gdrive';
 }
 
-export default function CSVModal({ onClose, onImport, employees, initialTab }: Props) {
+export default function CSVModal({ onClose, onImport, onClear, employees, initialTab }: Props) {
   const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>(initialTab || 'bulk');
   const [previewData, setPreviewData] = useState<Employee[]>([]);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
@@ -311,7 +312,7 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
             onClick={() => setActiveTab('gdrive')} 
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'gdrive' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
           >
-            <Cloud size={16}/> Google Drive
+            <Cloud size={16}/> Settings & Drive
           </button>
         </div>
 
@@ -582,6 +583,42 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
                   </div>
                 </div>
               )}
+
+              {/* Database Maintenance Section */}
+              <div className="pt-6 border-t border-slate-200 mt-6 space-y-4 font-sans">
+                <div className="flex items-center gap-2 text-red-600 font-bold text-sm">
+                  <Shield size={18} className="text-red-500 animate-pulse" />
+                  System Database Maintenance
+                </div>
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-3">
+                  <p className="text-xs text-red-800 leading-relaxed font-sans">
+                    <strong>Critical Action:</strong> This will permanently delete all employee records, service histories, and scanned documents in the local storage cache and from the cloud database.
+                  </p>
+                  <p className="text-xs text-red-700">
+                    Use this tool only when the database requires an absolute reset/re-import, or when fixing corrupted record formats.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (confirm('⚠️ WARNING: Are you sure you want to clear ALL employee and record data from the system?\n\nThis will completely wipe local and cloud records. This action cannot be undone.')) {
+                        if (confirm('⚠️ DOUBLE CONFIRMATION REQUIRED:\n\nPlease confirm again to delete all data.')) {
+                          try {
+                            setError(null);
+                            if (onClear) {
+                              await onClear();
+                            }
+                          } catch (err: any) {
+                            setError(err instanceof Error ? err.message : 'Failed to clear system data');
+                          }
+                        }
+                      }
+                    }}
+                    className="w-full sm:w-auto px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                  >
+                    Clear All System Data
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

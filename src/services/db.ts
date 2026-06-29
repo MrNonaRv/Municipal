@@ -410,3 +410,36 @@ export const dbDelete = async (id: string): Promise<void> => {
     addToSyncQueue({ id, type: 'DELETE' });
   }
 };
+
+export const dbClearAll = async (): Promise<void> => {
+  console.log('[dbClearAll] Clearing all database cache and calling server wipe...');
+  
+  // Clear local storage cache
+  localStorage.removeItem(CACHE_KEY);
+  localStorage.removeItem(QUEUE_KEY);
+  
+  // Mark system as cleared so we don't auto-seed
+  localStorage.setItem('gers_seeded_blocked', 'true');
+
+  const mode = getWorkMode();
+  if (mode === 'local') {
+    console.log('[dbClearAll] Mode is "local". Cleared local cache only.');
+    window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
+    window.dispatchEvent(new CustomEvent('gers_data_synced', { detail: [] }));
+    return;
+  }
+
+  try {
+    const response = await fetch('/api/employees/clear-all', {
+      method: 'POST'
+    });
+    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
+    console.log('[dbClearAll] Server database cleared successfully.');
+    
+    window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
+    window.dispatchEvent(new CustomEvent('gers_data_synced', { detail: [] }));
+  } catch (error) {
+    console.error('[dbClearAll] Failed to clear database on server:', error);
+    throw error;
+  }
+};

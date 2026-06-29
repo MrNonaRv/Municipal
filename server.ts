@@ -639,6 +639,46 @@ app.delete('/api/employees/:id', async (req, res) => {
   }
 });
 
+app.post('/api/employees/clear-all', async (req, res) => {
+  try {
+    const keys = Object.keys(dbCache).filter(key => key !== 'google_drive_config');
+    console.log(`[Server] Clearing all data. Total keys to remove: ${keys.length}`);
+    for (const key of keys) {
+      delete dbCache[key];
+    }
+    await saveDb();
+
+    if (firestoreDb) {
+      try {
+        const querySnapshot = await getDocs(collection(firestoreDb, 'app_data'));
+        for (const docSnap of querySnapshot.docs) {
+          if (docSnap.id !== 'google_drive_config') {
+            const data = docSnap.data();
+            if (data && data.chunks) {
+              for (let i = 0; i < data.chunks; i++) {
+                try {
+                  await deleteDoc(doc(firestoreDb, 'app_data', `${docSnap.id}_chunk_${i}`));
+                } catch (err) {
+                  // Ignore if already deleted
+                }
+              }
+            }
+            await deleteDoc(doc(firestoreDb, 'app_data', docSnap.id));
+          }
+        }
+        console.log('[Firebase] Synchronized full database clearance of employees to Firestore.');
+      } catch (fsErr) {
+        console.error('[Firebase] Failed to clear employees from Firestore:', fsErr);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Failed to clear all data:', error);
+    res.status(500).json({ error: 'Failed to clear all data' });
+  }
+});
+
 async function startServer() {
   const PORT = 3000;
 

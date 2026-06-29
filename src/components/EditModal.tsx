@@ -6,6 +6,7 @@ import { convertImageToPDF } from '../utils/pdfHelpers';
 import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getAccessToken, uploadFileToDrive, downloadFileFromDrive } from '../services/googleDrive';
+import { isOnline } from '../services/db';
 
 const DOCUMENT_TYPES = [
   { value: 'Birth_Certificate', label: 'Birth Certificate' },
@@ -45,35 +46,30 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   // States for Scanned Documents Attachment
-  const [selectedDocType, setSelectedDocType] = useState('Birth_Certificate');
-  const [newDocName, setNewDocName] = useState('Birth Certificate');
+  const [newDocName, setNewDocName] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleDocTypeChange = (type: string) => {
-    setSelectedDocType(type);
-    if (type !== 'Other') {
-      const matched = DOCUMENT_TYPES.find(d => d.value === type);
-      if (matched) {
-        setNewDocName(matched.label);
-      }
-    } else {
-      setNewDocName('');
-    }
-  };
-
-  // Check Google Drive connection status
+  // Check Google Drive connection status and online status to auto-detect destination
   useEffect(() => {
-    getAccessToken().then(token => {
+    const updateDest = async () => {
+      const token = await getAccessToken();
       const connected = !!token;
       setIsDriveConnected(connected);
-      if (connected) {
-        setUploadDestination('drive');
-      } else {
-        setUploadDestination('local');
-      }
-    });
+      const online = isOnline() && navigator.onLine;
+      setUploadDestination(connected && online ? 'drive' : 'local');
+    };
+    
+    updateDest();
+    
+    window.addEventListener('online', updateDest);
+    window.addEventListener('offline', updateDest);
+    
+    return () => {
+      window.removeEventListener('online', updateDest);
+      window.removeEventListener('offline', updateDest);
+    };
   }, [activeTab]);
 
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -90,6 +86,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         const base64 = await fileToBase64(file);
         setSelectedFile(file);
         setSelectedFileData(base64);
+
+        // Auto-populate document name if empty
+        if (!newDocName.trim()) {
+          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          setNewDocName(baseName);
+        }
       } catch (err) {
         console.error("File loading failed", err);
       }
@@ -99,6 +101,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handleAddAttachment = async () => {
     if (!newDocName.trim() || !selectedFile) return;
 
+    // Dynamically detect destination
+    const token = await getAccessToken();
+    const connected = !!token;
+    const online = isOnline() && navigator.onLine;
+    const dest = connected && online ? 'drive' : 'local';
+
     const ext = selectedFile.name.split('.').pop() || 'png';
     const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
     const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
@@ -106,7 +114,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     // Standardized Auto-named format
     const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
 
-    if (uploadDestination === 'drive') {
+    if (dest === 'drive') {
       setIsUploadingToDrive(true);
       setError(null);
       try {
@@ -130,8 +138,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         }));
 
         // Reset inputs
-        setSelectedDocType('Birth_Certificate');
-        setNewDocName('Birth Certificate');
+        setNewDocName('');
         setSelectedFile(null);
         setSelectedFileData(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -158,8 +165,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       }));
 
       // Reset inputs
-      setSelectedDocType('Birth_Certificate');
-      setNewDocName('Birth Certificate');
+      setNewDocName('');
       setSelectedFile(null);
       setSelectedFileData(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -508,37 +514,19 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       </h3>
                       
                       <div className="space-y-4">
-                        {/* Row 1: Document Category and Label */}
+                        {/* Unified Row: Name and File Selector */}
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Type / Category</label>
-                            <select
-                              value={selectedDocType}
-                              onChange={e => handleDocTypeChange(e.target.value)}
-                              className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white h-10"
-                            >
-                              {DOCUMENT_TYPES.map(type => (
-                                <option key={type.value} value={type.value}>
-                                  {type.label}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          
-                          <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Custom Name / Label</label>
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Name / Label</label>
                             <input
                               type="text"
-                              placeholder="e.g. Birth Certificate, Diploma"
+                              placeholder="e.g. Birth Certificate, Diploma, Contract"
                               value={newDocName}
                               onChange={e => setNewDocName(e.target.value)}
                               className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white h-10"
                             />
                           </div>
-                        </div>
 
-                        {/* Row 2: File Selector and Destination */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document File</label>
                             <div className="flex gap-3">
@@ -559,39 +547,20 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                               </button>
                             </div>
                           </div>
+                        </div>
 
-                          <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Storage Destination</label>
-                            <div className="flex gap-1.5 h-10">
-                              <button
-                                type="button"
-                                onClick={() => setUploadDestination('local')}
-                                className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all ${
-                                  uploadDestination === 'local'
-                                    ? 'bg-slate-200 border-slate-300 text-slate-700'
-                                    : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
-                                }`}
-                              >
-                                Local
-                              </button>
-                              <button
-                                type="button"
-                                disabled={!isDriveConnected}
-                                onClick={() => setUploadDestination('drive')}
-                                className={`flex-1 py-1.5 text-[10px] rounded-lg border font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
-                                  !isDriveConnected
-                                    ? 'bg-slate-50 border-slate-100 text-slate-300 cursor-not-allowed'
-                                    : uploadDestination === 'drive'
-                                    ? 'bg-indigo-50 border-indigo-200 text-indigo-700 shadow-sm'
-                                    : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600'
-                                }`}
-                                title={!isDriveConnected ? "Connect Google Drive in the main dashboard first" : ""}
-                              >
-                                <Cloud size={10} />
-                                GDrive
-                              </button>
-                            </div>
-                          </div>
+                        {/* Auto-detected Destination Status Indicator */}
+                        <div className="flex items-center gap-2 px-1 text-[10px] text-slate-400 font-medium">
+                          <div className={`w-1.5 h-1.5 rounded-full ${isDriveConnected && uploadDestination === 'drive' ? 'bg-indigo-500 animate-pulse' : 'bg-amber-500'}`} />
+                          {isDriveConnected && uploadDestination === 'drive' ? (
+                            <span className="flex items-center gap-1">
+                              System auto-detected connection. Saving directly to <strong className="text-indigo-600 font-semibold">Google Drive Storage</strong>.
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              System auto-detected offline/unlinked. Saving to <strong className="text-amber-600 font-semibold">Local Storage</strong> {!isDriveConnected ? "(Drive unlinked)" : "(Offline mode)"}.
+                            </span>
+                          )}
                         </div>
 
                         {/* File Naming Preview Box */}
@@ -617,6 +586,9 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       )}
                       {isDriveConnected && uploadDestination === 'drive' && (
                         <p className="mt-3 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your Google Drive storage.</p>
+                      )}
+                      {isDriveConnected && uploadDestination === 'local' && (
+                        <p className="mt-3 text-[9px] text-amber-500 italic">⚠️ Offline mode detected. File will be automatically saved locally and synchronized online later.</p>
                       )}
                       
                       <div className="mt-4 flex justify-end">

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Employee } from './types/employee';
-import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable } from './services/db';
+import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll } from './services/db';
 import { DEMO_EMPLOYEES } from './services/demoData';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
@@ -196,7 +196,7 @@ export default function App() {
     setIsLoading(true);
     try {
       let data = await dbGetAll();
-      if (data.length === 0) {
+      if (data.length === 0 && !localStorage.getItem('gers_seeded_blocked')) {
         // Seed demo data in parallel
         await Promise.all(DEMO_EMPLOYEES.map(emp => dbPut(emp)));
         data = await dbGetAll();
@@ -514,6 +514,12 @@ export default function App() {
               await loadEmployees();
               setIsCSVModalOpen(false);
               addToast(`Imported ${imported.length} records`, 'success');
+            }}
+            onClear={async () => {
+              await dbClearAll();
+              await loadEmployees();
+              setIsCSVModalOpen(false);
+              addToast('All data in the system has been cleared.', 'success');
             }}
           />
         )}
