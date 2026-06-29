@@ -153,12 +153,32 @@ async function loadDb() {
       const querySnapshot = await getDocs(collection(firestoreDb, 'app_data'));
       if (!querySnapshot.empty) {
         const firestoreCache: DatabaseSchema = {};
+        const chunkIndicators: Record<string, number> = {};
+        const chunkData: Record<string, string> = {};
+
         querySnapshot.forEach((docSnap) => {
           const data = docSnap.data();
-          if (data && typeof data.value === 'string') {
-            firestoreCache[docSnap.id] = data.value;
+          if (data) {
+            if (data.chunks) {
+              chunkIndicators[docSnap.id] = data.chunks;
+            } else if (docSnap.id.includes('_chunk_')) {
+              chunkData[docSnap.id] = data.value;
+            } else if (typeof data.value === 'string') {
+              firestoreCache[docSnap.id] = data.value;
+            }
           }
         });
+
+        // Reassemble chunks
+        for (const id in chunkIndicators) {
+          const numChunks = chunkIndicators[id];
+          let fullStr = '';
+          for (let i = 0; i < numChunks; i++) {
+            fullStr += chunkData[`${id}_chunk_${i}`] || '';
+          }
+          firestoreCache[id] = fullStr;
+        }
+
         // Merge Firestore records into dbCache (Firestore is master)
         dbCache = { ...dbCache, ...firestoreCache };
         console.log(`[Firebase] Successfully loaded and merged ${querySnapshot.size} records from Firestore.`);
@@ -167,7 +187,16 @@ async function loadDb() {
         // If Firestore is empty, seed it with the current dbCache records so they are saved to Firestore!
         for (const [key, val] of Object.entries(dbCache)) {
           if (typeof val === 'string') {
-            await setDoc(doc(firestoreDb, 'app_data', key), { value: val });
+            try {
+              // Firestore limits doc size to 1MB. encrypted val + metadata shouldn't exceed it.
+              if (val.length > 900000) {
+                console.warn(`[Firebase] Skipping seeding record ${key} to Firestore because it is too large (${val.length} bytes).`);
+                continue;
+              }
+              await setDoc(doc(firestoreDb, 'app_data', key), { value: val });
+            } catch (e) {
+              console.error(`[Firebase] Failed to write employee ID=${key} to Firestore:`, e);
+            }
           }
         }
         console.log('[Firebase] Successfully seeded Firestore with initial records.');
@@ -199,7 +228,7 @@ async function ensureDbLoaded() {
 
 // Middleware to lazily load DB on requests
 app.use(async (req, res, next) => {
-  if (req.path.startsWith('/api')) {
+  if (req.path.startsWith('/api') && req.path !== '/api/health') {
     await ensureDbLoaded();
   }
   next();
@@ -551,8 +580,21 @@ app.post('/api/employees', async (req, res) => {
 
     if (firestoreDb) {
       try {
-        await setDoc(doc(firestoreDb, 'app_data', employee.id), { value: encryptedData });
-        console.log(`[Firebase] Synchronized employee ID=${employee.id} to Firestore.`);
+        const CHUNK_SIZE = 800000;
+        if (encryptedData.length > CHUNK_SIZE) {
+          const numChunks = Math.ceil(encryptedData.length / CHUNK_SIZE);
+          await setDoc(doc(firestoreDb, 'app_data', employee.id), { chunks: numChunks });
+          for (let i = 0; i < numChunks; i++) {
+            await setDoc(doc(firestoreDb, 'app_data', `${employee.id}_chunk_${i}`), {
+              value: encryptedData.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
+            });
+          }
+          console.log(`[Firebase] Synchronized employee ID=${employee.id} to Firestore in ${numChunks} chunks.`);
+        } else {
+          // If overwriting a previously chunked document, delete its chunk indicator by overwriting it with 'value'
+          await setDoc(doc(firestoreDb, 'app_data', employee.id), { value: encryptedData });
+          console.log(`[Firebase] Synchronized employee ID=${employee.id} to Firestore.`);
+        }
       } catch (fsErr) {
         console.error(`[Firebase] Failed to write employee ID=${employee.id} to Firestore:`, fsErr);
       }
@@ -575,6 +617,15 @@ app.delete('/api/employees/:id', async (req, res) => {
 
     if (firestoreDb) {
       try {
+        const docSnap = await getDoc(doc(firestoreDb, 'app_data', id));
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          if (data.chunks) {
+            for (let i = 0; i < data.chunks; i++) {
+              await deleteDoc(doc(firestoreDb, 'app_data', `${id}_chunk_${i}`));
+            }
+          }
+        }
         await deleteDoc(doc(firestoreDb, 'app_data', id));
         console.log(`[Firebase] Synchronized deletion of employee ID=${id} to Firestore.`);
       } catch (fsErr) {

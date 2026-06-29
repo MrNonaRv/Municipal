@@ -79,6 +79,10 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       let file = e.target.files[0];
+      if (uploadDestination === 'local' && file.size > 700 * 1024 && !file.type.startsWith('image/')) {
+        setError("File must be smaller than 700KB for local storage. Please connect Google Drive for larger files.");
+        return;
+      }
       try {
         if (file.type.startsWith('image/')) {
           file = await convertImageToPDF(file, file.name);
@@ -218,14 +222,6 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     }
 
     switch (name) {
-      case 'dateOfBirth':
-        if (value) {
-          const dob = new Date(value);
-          if (dob > new Date()) {
-            errorMsg = 'Cannot be in the future';
-          }
-        }
-        break;
     }
     setValidationErrors(prev => ({ ...prev, [name]: errorMsg }));
     return errorMsg;
@@ -273,8 +269,13 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
 
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
+      let file = e.target.files[0];
+      if (file.size > 700 * 1024 && !file.type.startsWith('image/')) {
+        setError("File must be smaller than 700KB.");
+        return;
+      }
       try {
-        const base64 = await fileToBase64(e.target.files[0]);
+        const base64 = await fileToBase64(file);
         setFormData({ ...formData, photo: base64 });
       } catch (err) {
         console.error("Photo upload failed", err);
@@ -285,6 +286,10 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const handlePdsScanUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       let file = e.target.files[0];
+      if (file.size > 700 * 1024 && !file.type.startsWith('image/')) {
+        setError("PDS file must be smaller than 700KB. For larger files, please compress it first.");
+        return;
+      }
       try {
         if (file.type.startsWith('image/')) {
           file = await convertImageToPDF(file, file.name);
@@ -395,27 +400,6 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
               <input 
                 name="middleName" 
                 value={formData.middleName || ''} 
-                onChange={handleChange} 
-                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[var(--gold)] focus:border-transparent transition-all bg-white" 
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block font-sans">Date of Birth</label>
-              <input 
-                type="date"
-                name="dateOfBirth" 
-                value={formData.dateOfBirth || ''} 
-                onChange={handleChange} 
-                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[var(--gold)] focus:border-transparent transition-all bg-white" 
-              />
-            </div>
-
-            <div className="space-y-1 col-span-1 sm:col-span-2 md:col-span-1">
-              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block font-sans">Place of Birth</label>
-              <input 
-                name="placeOfBirth" 
-                value={formData.placeOfBirth || ''} 
                 onChange={handleChange} 
                 className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[var(--gold)] focus:border-transparent transition-all bg-white" 
               />
@@ -560,7 +544,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                             <div className="flex gap-3">
                               <input
                                 type="file"
-                                accept="image/*"
+                                accept="image/*,application/pdf"
                                 onChange={handleAttachmentFileChange}
                                 ref={fileInputRef}
                                 className="hidden"

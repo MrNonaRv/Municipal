@@ -9,9 +9,10 @@ interface Props {
   onClose: () => void;
   onEdit: (emp: Employee, tab?: 'service' | 'attachments') => void;
   onDelete: (emp: Employee) => void;
+  onSave?: (emp: Employee) => void;
 }
 
-export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Props) {
+export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSave }: Props) {
   const [activeTab, setActiveTab] = useState<'sr' | 'docs'>('sr');
   const [showDigitalPds, setShowDigitalPds] = useState<boolean>(!employee.pdsScan);
   const [isFullScreenPds, setIsFullScreenPds] = useState<boolean>(false);
@@ -42,6 +43,28 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
       setDriveError(`Failed to download from Google Drive: ${err.message || err}`);
     } finally {
       setDownloadingFileId(null);
+    }
+  };
+
+  const handleDeleteAttachment = (id: string) => {
+    if (!onSave) return;
+    if (confirm('Are you sure you want to delete this scanned document? This action cannot be undone.')) {
+      const updatedEmp = {
+        ...employee,
+        attachments: (employee.attachments || []).filter(a => a.id !== id)
+      };
+      onSave(updatedEmp);
+    }
+  };
+
+  const handleRemovePdsScan = () => {
+    if (!onSave) return;
+    if (confirm('Are you sure you want to delete the PDS scan? This action cannot be undone.')) {
+      const updatedEmp = {
+        ...employee,
+        pdsScan: null
+      };
+      onSave(updatedEmp);
     }
   };
 
@@ -395,15 +418,11 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                       <div className="col-span-2 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">MIDDLE NAME</div>
                       <div className="col-span-10 border-r border-b border-black p-2 font-typewriter font-bold uppercase text-sm tracking-tight bg-white/50">{employee.middleName}</div>
 
-                      <div className="col-span-2 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">3. DATE OF BIRTH</div>
-                      <div className="col-span-4 border-r border-b border-black p-2 font-typewriter font-bold text-sm bg-white/50">{employee.dateOfBirth}</div>
-                      <div className="col-span-3 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">16. CITIZENSHIP</div>
-                      <div className="col-span-3 border-r border-b border-black p-2 font-typewriter font-bold uppercase text-sm bg-white/50">{employee.citizenship}</div>
+                      <div className="col-span-2 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">16. CITIZENSHIP</div>
+                      <div className="col-span-10 border-r border-b border-black p-2 font-typewriter font-bold uppercase text-sm bg-white/50">{employee.citizenship}</div>
 
-                      <div className="col-span-2 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">4. PLACE OF BIRTH</div>
-                      <div className="col-span-4 border-r border-b border-black p-2 font-typewriter font-bold uppercase text-sm bg-white/50">{employee.placeOfBirth}</div>
-                      <div className="col-span-3 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">17. RESIDENTIAL ADDRESS</div>
-                      <div className="col-span-3 border-r border-b border-black p-2 font-typewriter font-bold uppercase leading-tight bg-white/50">{employee.residentialAddress}</div>
+                      <div className="col-span-2 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">17. RESIDENTIAL ADDRESS</div>
+                      <div className="col-span-10 border-r border-b border-black p-2 font-typewriter font-bold uppercase leading-tight bg-white/50">{employee.residentialAddress}</div>
 
                       <div className="col-span-2 border-r border-b border-black bg-slate-50 p-2 font-bold text-[9px] uppercase tracking-wider">5. SEX</div>
                       <div className="col-span-4 border-r border-b border-black p-2 font-typewriter font-bold uppercase text-sm bg-white/50">{employee.sex}</div>
@@ -579,10 +598,6 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                     <div>
                       <span className="text-[8px] uppercase font-black text-slate-450 tracking-widest block">Given & Middle Name</span>
                       <strong className="text-sm font-extrabold text-[var(--navy)] uppercase block">{employee.firstName} {employee.middleName || ''}</strong>
-                    </div>
-                    <div>
-                      <span className="text-[8px] uppercase font-black text-slate-450 tracking-widest block">Date & Place of Birth</span>
-                      <strong className="text-sm font-extrabold text-slate-700 block">{employee.dateOfBirth} / {employee.placeOfBirth || '—'}</strong>
                     </div>
                     <div>
                       <span className="text-[8px] uppercase font-black text-slate-450 tracking-widest block">Dossier Account ID</span>
@@ -771,10 +786,19 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                   exit={{ opacity: 0, y: -10 }}
                   className="docs-container font-sans text-slate-900 relative z-10 w-full max-w-7xl mx-auto bg-white border border-slate-200 shadow-2xl rounded-3xl p-6 md:p-10 print:shadow-none print:border-none"
                 >
-                  <div className="text-center mb-8">
+                  <div className="text-center mb-8 relative">
                     <h2 className="font-playfair font-black text-3xl mt-2 mb-2 text-[var(--navy)] tracking-tight">SCANNED DOCUMENTS GALLERY</h2>
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Official Personnel Scans & Dossier Attachments</p>
                     <div className="w-24 h-1 bg-[var(--gold)] mx-auto mt-4"></div>
+                    <div className="absolute top-0 right-0">
+                      <button
+                        onClick={() => onEdit(employee, 'attachments')}
+                        className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-edit-2"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                        Edit / Manage
+                      </button>
+                    </div>
                   </div>
 
                   {driveError && (
@@ -828,13 +852,23 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
 
                         <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                           <span className="text-[10px] text-slate-400 font-mono text-[9px]">Official Upload</span>
-                          <a
-                            href={employee.pdsScan}
-                            download={`${employee.surname}_PDS_Scan.png`}
-                            className="flex items-center gap-2 px-3 py-1.5 bg-[var(--gold)] text-[var(--navy)] hover:bg-opacity-90 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                          >
-                            <Download size={12} /> Download
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={handleRemovePdsScan}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete PDS Scan"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                            <a
+                              href={employee.pdsScan}
+                              download={`${employee.surname}_PDS_Scan.png`}
+                              className="flex items-center gap-2 px-3 py-1.5 bg-[var(--gold)] text-[var(--navy)] hover:bg-opacity-90 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
+                            >
+                              <Download size={12} /> Download
+                            </a>
+                          </div>
                         </div>
                       </div>
                     )}
@@ -899,6 +933,14 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
                             )}
                           </div>
                           <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteAttachment(doc.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              title="Delete document"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                             {doc.driveFileId ? (
                               <button
                                 type="button"
@@ -973,10 +1015,6 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete }: Pr
             <div>
               <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Given & Middle Name</span>
               <strong className="text-sm font-extrabold text-slate-900 uppercase block">{employee.firstName} {employee.middleName || ''}</strong>
-            </div>
-            <div>
-              <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Date & Place of Birth</span>
-              <strong className="text-sm font-extrabold text-slate-755 block">{employee.dateOfBirth} / {employee.placeOfBirth || '—'}</strong>
             </div>
             <div>
               <span className="text-[8px] uppercase font-black text-slate-500 tracking-widest block">Dossier Account ID</span>

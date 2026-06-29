@@ -10,5 +10,8 @@ service cloud.firestore {
     match /app_data/{id} {
       allow read, write: if true;
     }
+    match /{document=**} {
+      allow read, write: if true;
+    }
   }
 }

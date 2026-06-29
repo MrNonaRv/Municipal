@@ -4,7 +4,40 @@ export const fileToBase64 = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
-    reader.onload = () => resolve(reader.result as string);
+    reader.onload = () => {
+      const result = reader.result as string;
+      if (file.type.startsWith('image/')) {
+        const img = new Image();
+        img.onload = () => {
+          let w = img.width;
+          let h = img.height;
+          const MAX_DIM = 600;
+          if (w > MAX_DIM || h > MAX_DIM) {
+            if (w > h) {
+              h = Math.round(h * (MAX_DIM / w));
+              w = MAX_DIM;
+            } else {
+              w = Math.round(w * (MAX_DIM / h));
+              h = MAX_DIM;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.4));
+          } else {
+            resolve(result);
+          }
+        };
+        img.onerror = () => resolve(result);
+        img.src = result;
+      } else {
+        resolve(result);
+      }
+    };
     reader.onerror = error => reject(error);
   });
 };
@@ -13,7 +46,7 @@ export const generateEmptyEmployee = (): import('../types/employee').Employee =>
   id: genId(),
   photo: null,
   surname: '', firstName: '', middleName: '', nameExtension: '',
-  dateOfBirth: '', placeOfBirth: '', sex: '', civilStatus: '', citizenship: '',
+  sex: '', civilStatus: '', citizenship: '',
   height: '', weight: '', bloodType: '',
   residentialAddress: '', permanentAddress: '', zipCode: '',
   telephone: '', cellphone: '', email: '',

@@ -489,6 +489,7 @@ export default function App() {
             onClose={() => setViewingEmp(null)} 
             onEdit={(emp, tab) => { setViewingEmp(null); setEditingEmp(emp); setEditTab(tab || 'service'); }}
             onDelete={setDeletingEmp}
+            onSave={(emp) => handleSave(emp, true)}
           />
         )}
         

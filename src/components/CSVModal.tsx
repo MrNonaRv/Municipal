@@ -216,7 +216,7 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
     const toExport = employees.filter(e => selectedForExport.has(e.id));
     if (toExport.length === 0) return;
     
-    const headers = ['id', 'surname', 'firstName', 'middleName', 'dateOfBirth', 'sex', 'civilStatus', 'email', 'cellphone'];
+    const headers = ['id', 'surname', 'firstName', 'middleName', 'sex', 'civilStatus', 'email', 'cellphone'];
     const csv = [
       headers.join(','),
       ...toExport.map(emp => headers.map(h => {
@@ -369,7 +369,6 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
                       <thead className="bg-gray-50 border-b">
                         <tr>
                           <th className="px-3 py-2">Name</th>
-                          <th className="px-3 py-2">DOB</th>
                           <th className="px-3 py-2">Email</th>
                         </tr>
                       </thead>
@@ -377,7 +376,6 @@ export default function CSVModal({ onClose, onImport, employees, initialTab }: P
                         {previewData.slice(0, 8).map((emp, i) => (
                           <tr key={i} className="border-b last:border-0">
                             <td className="px-3 py-2">{emp.firstName} {emp.surname}</td>
-                            <td className="px-3 py-2">{emp.dateOfBirth}</td>
                             <td className="px-3 py-2">{emp.email}</td>
                           </tr>
                         ))}

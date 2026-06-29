@@ -49,8 +49,6 @@ export interface Employee {
   firstName: string;
   middleName: string;
   nameExtension: string;
-  dateOfBirth: string;
-  placeOfBirth: string;
   sex: string;
   civilStatus: string;
   citizenship: string;

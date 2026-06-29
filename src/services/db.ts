@@ -39,9 +39,9 @@ export const checkServerConnection = async (): Promise<boolean> => {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.warn('[checkServerConnection] Connection check timed out after 3000ms.');
+      console.warn('[checkServerConnection] Connection check timed out after 10000ms.');
       controller.abort();
-    }, 3000);
+    }, 10000);
     
     console.log('[checkServerConnection] Fetching /api/health...');
     const response = await fetch('/api/health', { signal: controller.signal });
