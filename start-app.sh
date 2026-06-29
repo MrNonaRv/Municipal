@@ -36,5 +36,14 @@ if [ ! -d "node_modules" ]; then
 fi
 
 echo "[INFO] Starting application..."
+echo "Open your browser to: http://localhost:3000"
 echo ""
-npm run electron:dev
+
+# Try to open the URL automatically
+if command -v xdg-open &> /dev/null; then
+    xdg-open http://localhost:3000
+elif command -v open &> /dev/null; then
+    open http://localhost:3000
+fi
+
+npm run dev

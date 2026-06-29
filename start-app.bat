@@ -35,5 +35,12 @@ if not exist node_modules (
 
 echo [INFO] Starting application...
 echo.
-npm run electron:dev
+echo Please keep this window open while using the application.
+echo Once the server is running, open your browser to:
+echo http://localhost:3000
+echo.
+
+:: Start the browser and run the server
+start http://localhost:3000
+npm run dev
 pause
