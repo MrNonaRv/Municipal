@@ -8,6 +8,15 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import initialDatabase from './database.json';
 
+import { db } from './src/db/index.ts';
+import { employees } from './src/db/schema.ts';
+import { getOrCreateUser } from './src/db/users.ts';
+import { eq } from 'drizzle-orm';
+
+async function getDummyUser() {
+  return await getOrCreateUser('dummy_desktop_user', 'desktop_user@local');
+}
+
 dotenv.config();
 
 let currentDirname = '';
@@ -254,21 +263,55 @@ app.get('/health', (req, res) => {
 
 app.get('/api/employees', async (req, res) => {
   try {
-    const keys = Object.keys(dbCache).filter(key => key !== 'google_drive_config');
-    const records = keys.map(key => dbCache[key]);
-    const employees = records.map(encryptedData => {
-      try {
-        return JSON.parse(decrypt(encryptedData));
-      } catch (e) {
-        // If decryption fails, maybe it's not encrypted yet? (for migration)
-        try {
-          return JSON.parse(encryptedData);
-        } catch (e2) {
-          return null;
-        }
-      }
-    }).filter(Boolean);
-    res.json(employees);
+    const dummyUser = await getDummyUser();
+    const records = await db.select().from(employees).where(eq(employees.userId, dummyUser.id));
+    
+    // Convert back to original frontend model
+    const employeesData = records.map(record => ({
+      id: record.originalId,
+      photo: record.photo,
+      surname: record.surname,
+      firstName: record.firstName,
+      middleName: record.middleName,
+      nameExtension: record.nameExtension,
+      sex: record.sex,
+      civilStatus: record.civilStatus,
+      citizenship: record.citizenship,
+      height: record.height,
+      weight: record.weight,
+      bloodType: record.bloodType,
+      residentialAddress: record.residentialAddress,
+      permanentAddress: record.permanentAddress,
+      zipCode: record.zipCode,
+      telephone: record.telephone,
+      cellphone: record.cellphone,
+      email: record.email,
+      gsisNo: record.gsisNo,
+      pagibigNo: record.pagibigNo,
+      philhealthNo: record.philhealthNo,
+      sssNo: record.sssNo,
+      tin: record.tin,
+      agencyEmployeeNo: record.agencyEmployeeNo,
+      spouseSurname: record.spouseSurname,
+      spouseFirstName: record.spouseFirstName,
+      spouseMiddleName: record.spouseMiddleName,
+      spouseOccupation: record.spouseOccupation,
+      spouseEmployer: record.spouseEmployer,
+      spouseTelephone: record.spouseTelephone,
+      children: record.children || [],
+      fatherSurname: record.fatherSurname,
+      fatherFirstName: record.fatherFirstName,
+      fatherMiddleName: record.fatherMiddleName,
+      motherSurname: record.motherSurname,
+      motherFirstName: record.motherFirstName,
+      motherMiddleName: record.motherMiddleName,
+      education: record.education || [],
+      serviceRecords: record.serviceRecords || [],
+      attachments: record.attachments || [],
+      pdsScan: record.pdsScan
+    }));
+
+    res.json(employeesData);
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to fetch employees' });
@@ -587,30 +630,99 @@ app.delete('/api/drive/delete/:fileId', async (req, res) => {
 app.post('/api/employees', async (req, res) => {
   try {
     const employee = req.body;
-    const encryptedData = encrypt(JSON.stringify(employee));
-    dbCache[employee.id] = encryptedData;
-    await saveDb();
-
-    if (firestoreDb) {
-      try {
-        const CHUNK_SIZE = 800000;
-        if (encryptedData.length > CHUNK_SIZE) {
-          const numChunks = Math.ceil(encryptedData.length / CHUNK_SIZE);
-          await setDoc(doc(firestoreDb, 'app_data', employee.id), { chunks: numChunks });
-          for (let i = 0; i < numChunks; i++) {
-            await setDoc(doc(firestoreDb, 'app_data', `${employee.id}_chunk_${i}`), {
-              value: encryptedData.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE)
-            });
-          }
-          console.log(`[Firebase] Synchronized employee ID=${employee.id} to Firestore in ${numChunks} chunks.`);
-        } else {
-          // If overwriting a previously chunked document, delete its chunk indicator by overwriting it with 'value'
-          await setDoc(doc(firestoreDb, 'app_data', employee.id), { value: encryptedData });
-          console.log(`[Firebase] Synchronized employee ID=${employee.id} to Firestore.`);
-        }
-      } catch (fsErr) {
-        console.error(`[Firebase] Failed to write employee ID=${employee.id} to Firestore:`, fsErr);
-      }
+    const dummyUser = await getDummyUser();
+    
+    // Upsert logic using originalId
+    const existing = await db.select().from(employees).where(eq(employees.originalId, employee.id)).limit(1);
+    
+    if (existing.length > 0) {
+      await db.update(employees).set({
+        photo: employee.photo,
+        surname: employee.surname,
+        firstName: employee.firstName,
+        middleName: employee.middleName,
+        nameExtension: employee.nameExtension,
+        sex: employee.sex,
+        civilStatus: employee.civilStatus,
+        citizenship: employee.citizenship,
+        height: employee.height,
+        weight: employee.weight,
+        bloodType: employee.bloodType,
+        residentialAddress: employee.residentialAddress,
+        permanentAddress: employee.permanentAddress,
+        zipCode: employee.zipCode,
+        telephone: employee.telephone,
+        cellphone: employee.cellphone,
+        email: employee.email,
+        gsisNo: employee.gsisNo,
+        pagibigNo: employee.pagibigNo,
+        philhealthNo: employee.philhealthNo,
+        sssNo: employee.sssNo,
+        tin: employee.tin,
+        agencyEmployeeNo: employee.agencyEmployeeNo,
+        spouseSurname: employee.spouseSurname,
+        spouseFirstName: employee.spouseFirstName,
+        spouseMiddleName: employee.spouseMiddleName,
+        spouseOccupation: employee.spouseOccupation,
+        spouseEmployer: employee.spouseEmployer,
+        spouseTelephone: employee.spouseTelephone,
+        children: employee.children || [],
+        fatherSurname: employee.fatherSurname,
+        fatherFirstName: employee.fatherFirstName,
+        fatherMiddleName: employee.fatherMiddleName,
+        motherSurname: employee.motherSurname,
+        motherFirstName: employee.motherFirstName,
+        motherMiddleName: employee.motherMiddleName,
+        education: employee.education || [],
+        serviceRecords: employee.serviceRecords || [],
+        attachments: employee.attachments || [],
+        pdsScan: employee.pdsScan
+      }).where(eq(employees.originalId, employee.id));
+    } else {
+      await db.insert(employees).values({
+        userId: dummyUser.id,
+        originalId: employee.id,
+        photo: employee.photo,
+        surname: employee.surname,
+        firstName: employee.firstName,
+        middleName: employee.middleName,
+        nameExtension: employee.nameExtension,
+        sex: employee.sex,
+        civilStatus: employee.civilStatus,
+        citizenship: employee.citizenship,
+        height: employee.height,
+        weight: employee.weight,
+        bloodType: employee.bloodType,
+        residentialAddress: employee.residentialAddress,
+        permanentAddress: employee.permanentAddress,
+        zipCode: employee.zipCode,
+        telephone: employee.telephone,
+        cellphone: employee.cellphone,
+        email: employee.email,
+        gsisNo: employee.gsisNo,
+        pagibigNo: employee.pagibigNo,
+        philhealthNo: employee.philhealthNo,
+        sssNo: employee.sssNo,
+        tin: employee.tin,
+        agencyEmployeeNo: employee.agencyEmployeeNo,
+        spouseSurname: employee.spouseSurname,
+        spouseFirstName: employee.spouseFirstName,
+        spouseMiddleName: employee.spouseMiddleName,
+        spouseOccupation: employee.spouseOccupation,
+        spouseEmployer: employee.spouseEmployer,
+        spouseTelephone: employee.spouseTelephone,
+        children: employee.children || [],
+        fatherSurname: employee.fatherSurname,
+        fatherFirstName: employee.fatherFirstName,
+        fatherMiddleName: employee.fatherMiddleName,
+        motherSurname: employee.motherSurname,
+        motherFirstName: employee.motherFirstName,
+        motherMiddleName: employee.motherMiddleName,
+        education: employee.education || [],
+        serviceRecords: employee.serviceRecords || [],
+        attachments: employee.attachments || [],
+        pdsScan: employee.pdsScan
+      });
     }
 
     res.json({ success: true });
@@ -623,28 +735,7 @@ app.post('/api/employees', async (req, res) => {
 app.delete('/api/employees/:id', async (req, res) => {
   try {
     const id = req.params.id;
-    if (dbCache[id]) {
-      delete dbCache[id];
-      await saveDb();
-    }
-
-    if (firestoreDb) {
-      try {
-        const docSnap = await getDoc(doc(firestoreDb, 'app_data', id));
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          if (data.chunks) {
-            for (let i = 0; i < data.chunks; i++) {
-              await deleteDoc(doc(firestoreDb, 'app_data', `${id}_chunk_${i}`));
-            }
-          }
-        }
-        await deleteDoc(doc(firestoreDb, 'app_data', id));
-        console.log(`[Firebase] Synchronized deletion of employee ID=${id} to Firestore.`);
-      } catch (fsErr) {
-        console.error(`[Firebase] Failed to delete employee ID=${id} from Firestore:`, fsErr);
-      }
-    }
+    await db.delete(employees).where(eq(employees.originalId, id));
 
     res.json({ success: true });
   } catch (error) {
@@ -654,36 +745,8 @@ app.delete('/api/employees/:id', async (req, res) => {
 
 app.post('/api/employees/clear-all', async (req, res) => {
   try {
-    const keys = Object.keys(dbCache).filter(key => key !== 'google_drive_config');
-    console.log(`[Server] Clearing all data. Total keys to remove: ${keys.length}`);
-    for (const key of keys) {
-      delete dbCache[key];
-    }
-    await saveDb();
-
-    if (firestoreDb) {
-      try {
-        const querySnapshot = await getDocs(collection(firestoreDb, 'app_data'));
-        for (const docSnap of querySnapshot.docs) {
-          if (docSnap.id !== 'google_drive_config') {
-            const data = docSnap.data();
-            if (data && data.chunks) {
-              for (let i = 0; i < data.chunks; i++) {
-                try {
-                  await deleteDoc(doc(firestoreDb, 'app_data', `${docSnap.id}_chunk_${i}`));
-                } catch (err) {
-                  // Ignore if already deleted
-                }
-              }
-            }
-            await deleteDoc(doc(firestoreDb, 'app_data', docSnap.id));
-          }
-        }
-        console.log('[Firebase] Synchronized full database clearance of employees to Firestore.');
-      } catch (fsErr) {
-        console.error('[Firebase] Failed to clear employees from Firestore:', fsErr);
-      }
-    }
+    const dummyUser = await getDummyUser();
+    await db.delete(employees).where(eq(employees.userId, dummyUser.id));
 
     res.json({ success: true });
   } catch (error) {
