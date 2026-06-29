@@ -1,7 +1,5 @@
-import { Employee } from '../types/employee';
-
-export const DEMO_EMPLOYEES: Employee[] = [
-  {
+{
+  "EMP-001": {
     "id": "EMP-001",
     "photo": null,
     "surname": "BUENAVISTA",
@@ -70,7 +68,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-002": {
     "id": "EMP-002",
     "photo": null,
     "surname": "LABAO",
@@ -139,7 +137,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-003": {
     "id": "EMP-003",
     "photo": null,
     "surname": "VILLAESTER",
@@ -208,7 +206,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-004": {
     "id": "EMP-004",
     "photo": null,
     "surname": "TICAR",
@@ -277,7 +275,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-005": {
     "id": "EMP-005",
     "photo": null,
     "surname": "LAURILLA",
@@ -346,7 +344,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-006": {
     "id": "EMP-006",
     "photo": null,
     "surname": "TRAJANO",
@@ -415,7 +413,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-007": {
     "id": "EMP-007",
     "photo": null,
     "surname": "LAYO",
@@ -484,7 +482,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-008": {
     "id": "EMP-008",
     "photo": null,
     "surname": "JUMBAS",
@@ -553,7 +551,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-009": {
     "id": "EMP-009",
     "photo": null,
     "surname": "UY",
@@ -622,7 +620,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-010": {
     "id": "EMP-010",
     "photo": null,
     "surname": "DIANGSON",
@@ -691,7 +689,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-011": {
     "id": "EMP-011",
     "photo": null,
     "surname": "BUENAVISTA",
@@ -760,7 +758,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-012": {
     "id": "EMP-012",
     "photo": null,
     "surname": "LEONIDA",
@@ -829,7 +827,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-013": {
     "id": "EMP-013",
     "photo": null,
     "surname": "BENSURTO",
@@ -898,7 +896,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-014": {
     "id": "EMP-014",
     "photo": null,
     "surname": "PUNCION",
@@ -967,7 +965,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-015": {
     "id": "EMP-015",
     "photo": null,
     "surname": "LADOC",
@@ -1036,7 +1034,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-016": {
     "id": "EMP-016",
     "photo": null,
     "surname": "BERJAMIN",
@@ -1105,7 +1103,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-017": {
     "id": "EMP-017",
     "photo": null,
     "surname": "BERJAMIN",
@@ -1174,7 +1172,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-018": {
     "id": "EMP-018",
     "photo": null,
     "surname": "BERJAMIN",
@@ -1243,7 +1241,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-019": {
     "id": "EMP-019",
     "photo": null,
     "surname": "CAMIQUE JINALYN L",
@@ -1312,7 +1310,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-020": {
     "id": "EMP-020",
     "photo": null,
     "surname": "LLORENTE",
@@ -1381,7 +1379,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-021": {
     "id": "EMP-021",
     "photo": null,
     "surname": "VIPINOSA",
@@ -1450,7 +1448,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-022": {
     "id": "EMP-022",
     "photo": null,
     "surname": "VIPINOSA",
@@ -1519,7 +1517,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-023": {
     "id": "EMP-023",
     "photo": null,
     "surname": "LABAO",
@@ -1588,7 +1586,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-024": {
     "id": "EMP-024",
     "photo": null,
     "surname": "LABRIS",
@@ -1657,7 +1655,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-025": {
     "id": "EMP-025",
     "photo": null,
     "surname": "PALMA",
@@ -1726,7 +1724,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-026": {
     "id": "EMP-026",
     "photo": null,
     "surname": "PALMES",
@@ -1795,7 +1793,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-027": {
     "id": "EMP-027",
     "photo": null,
     "surname": "LINDA",
@@ -1864,7 +1862,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-028": {
     "id": "EMP-028",
     "photo": null,
     "surname": "SANGRONES",
@@ -1933,7 +1931,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-029": {
     "id": "EMP-029",
     "photo": null,
     "surname": "LOZADA",
@@ -2002,7 +2000,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-030": {
     "id": "EMP-030",
     "photo": null,
     "surname": "ALOJADO",
@@ -2071,7 +2069,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-031": {
     "id": "EMP-031",
     "photo": null,
     "surname": "BALDONADO",
@@ -2140,7 +2138,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-032": {
     "id": "EMP-032",
     "photo": null,
     "surname": "DOMINGO",
@@ -2209,7 +2207,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-033": {
     "id": "EMP-033",
     "photo": null,
     "surname": "MARABE",
@@ -2278,7 +2276,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-034": {
     "id": "EMP-034",
     "photo": null,
     "surname": "LORIJO",
@@ -2347,7 +2345,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-035": {
     "id": "EMP-035",
     "photo": null,
     "surname": "SILVESTRE",
@@ -2416,7 +2414,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-036": {
     "id": "EMP-036",
     "photo": null,
     "surname": "DELFIN",
@@ -2485,7 +2483,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-037": {
     "id": "EMP-037",
     "photo": null,
     "surname": "MONAJAN",
@@ -2554,7 +2552,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-038": {
     "id": "EMP-038",
     "photo": null,
     "surname": "MARTINEZ",
@@ -2623,7 +2621,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-039": {
     "id": "EMP-039",
     "photo": null,
     "surname": "SALOMEO",
@@ -2692,7 +2690,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-040": {
     "id": "EMP-040",
     "photo": null,
     "surname": "NAVARRA",
@@ -2761,7 +2759,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-041": {
     "id": "EMP-041",
     "photo": null,
     "surname": "LAUNIO",
@@ -2830,7 +2828,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-042": {
     "id": "EMP-042",
     "photo": null,
     "surname": "ANDAYA",
@@ -2899,7 +2897,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-043": {
     "id": "EMP-043",
     "photo": null,
     "surname": "FERNANDEZ",
@@ -2968,7 +2966,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-044": {
     "id": "EMP-044",
     "photo": null,
     "surname": "NAVARRA",
@@ -3037,7 +3035,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-045": {
     "id": "EMP-045",
     "photo": null,
     "surname": "VALIENTE",
@@ -3106,7 +3104,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-046": {
     "id": "EMP-046",
     "photo": null,
     "surname": "LAPIDEZ",
@@ -3175,7 +3173,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-047": {
     "id": "EMP-047",
     "photo": null,
     "surname": "TOLEDO",
@@ -3244,7 +3242,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-048": {
     "id": "EMP-048",
     "photo": null,
     "surname": "ANDAYA",
@@ -3313,7 +3311,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-049": {
     "id": "EMP-049",
     "photo": null,
     "surname": "DELA CENA",
@@ -3382,7 +3380,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-050": {
     "id": "EMP-050",
     "photo": null,
     "surname": "LLORITO",
@@ -3451,7 +3449,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-051": {
     "id": "EMP-051",
     "photo": null,
     "surname": "LATIERA",
@@ -3520,7 +3518,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-052": {
     "id": "EMP-052",
     "photo": null,
     "surname": "BERONDO",
@@ -3589,7 +3587,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-053": {
     "id": "EMP-053",
     "photo": null,
     "surname": "MOISES",
@@ -3658,7 +3656,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-054": {
     "id": "EMP-054",
     "photo": null,
     "surname": "BARANDA",
@@ -3727,7 +3725,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-055": {
     "id": "EMP-055",
     "photo": null,
     "surname": "LARIOSA",
@@ -3796,7 +3794,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-056": {
     "id": "EMP-056",
     "photo": null,
     "surname": "POTATO",
@@ -3865,7 +3863,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-057": {
     "id": "EMP-057",
     "photo": null,
     "surname": "GAVERO",
@@ -3934,7 +3932,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-058": {
     "id": "EMP-058",
     "photo": null,
     "surname": "LAYSA",
@@ -4003,7 +4001,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-059": {
     "id": "EMP-059",
     "photo": null,
     "surname": "OCATE",
@@ -4072,7 +4070,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-060": {
     "id": "EMP-060",
     "photo": null,
     "surname": "LIPARDO",
@@ -4141,7 +4139,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-061": {
     "id": "EMP-061",
     "photo": null,
     "surname": "GREGORIO",
@@ -4210,7 +4208,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-062": {
     "id": "EMP-062",
     "photo": null,
     "surname": "LOMPERO",
@@ -4279,7 +4277,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-063": {
     "id": "EMP-063",
     "photo": null,
     "surname": "ASIS",
@@ -4348,7 +4346,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-064": {
     "id": "EMP-064",
     "photo": null,
     "surname": "ANDAYA",
@@ -4417,7 +4415,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-065": {
     "id": "EMP-065",
     "photo": null,
     "surname": "FELOSOPO",
@@ -4486,7 +4484,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-066": {
     "id": "EMP-066",
     "photo": null,
     "surname": "LAUBEÑA",
@@ -4555,7 +4553,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-067": {
     "id": "EMP-067",
     "photo": null,
     "surname": "LACUARTA",
@@ -4624,7 +4622,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-068": {
     "id": "EMP-068",
     "photo": null,
     "surname": "VILLEZA",
@@ -4693,7 +4691,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-069": {
     "id": "EMP-069",
     "photo": null,
     "surname": "ARTEZA",
@@ -4762,7 +4760,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-070": {
     "id": "EMP-070",
     "photo": null,
     "surname": "LAZ",
@@ -4831,7 +4829,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-071": {
     "id": "EMP-071",
     "photo": null,
     "surname": "PALOMO",
@@ -4900,7 +4898,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-072": {
     "id": "EMP-072",
     "photo": null,
     "surname": "DIAZ",
@@ -4969,7 +4967,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-073": {
     "id": "EMP-073",
     "photo": null,
     "surname": "MOAÑA",
@@ -5038,7 +5036,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-074": {
     "id": "EMP-074",
     "photo": null,
     "surname": "GALAPIA",
@@ -5107,7 +5105,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-075": {
     "id": "EMP-075",
     "photo": null,
     "surname": "ANDAYA",
@@ -5176,7 +5174,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-076": {
     "id": "EMP-076",
     "photo": null,
     "surname": "MESIAS",
@@ -5245,7 +5243,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-077": {
     "id": "EMP-077",
     "photo": null,
     "surname": "LETRAN",
@@ -5314,7 +5312,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-078": {
     "id": "EMP-078",
     "photo": null,
     "surname": "LINAN",
@@ -5383,7 +5381,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-079": {
     "id": "EMP-079",
     "photo": null,
     "surname": "AYCO",
@@ -5452,7 +5450,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-080": {
     "id": "EMP-080",
     "photo": null,
     "surname": "JAVIER",
@@ -5521,7 +5519,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-081": {
     "id": "EMP-081",
     "photo": null,
     "surname": "LUNA",
@@ -5590,7 +5588,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-082": {
     "id": "EMP-082",
     "photo": null,
     "surname": "FRIAS",
@@ -5659,7 +5657,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-083": {
     "id": "EMP-083",
     "photo": null,
     "surname": "VISTA",
@@ -5728,7 +5726,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-084": {
     "id": "EMP-084",
     "photo": null,
     "surname": "FELIZARDO",
@@ -5797,7 +5795,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-085": {
     "id": "EMP-085",
     "photo": null,
     "surname": "LUCES",
@@ -5866,7 +5864,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-086": {
     "id": "EMP-086",
     "photo": null,
     "surname": "ANDAYA",
@@ -5935,7 +5933,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-087": {
     "id": "EMP-087",
     "photo": null,
     "surname": "BAUTISTA",
@@ -6004,7 +6002,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-088": {
     "id": "EMP-088",
     "photo": null,
     "surname": "FELIZARDO",
@@ -6073,7 +6071,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-089": {
     "id": "EMP-089",
     "photo": null,
     "surname": "LABO",
@@ -6142,7 +6140,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-090": {
     "id": "EMP-090",
     "photo": null,
     "surname": "BERGANIO",
@@ -6211,7 +6209,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-091": {
     "id": "EMP-091",
     "photo": null,
     "surname": "TOLEDO",
@@ -6280,7 +6278,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-092": {
     "id": "EMP-092",
     "photo": null,
     "surname": "GUION",
@@ -6349,7 +6347,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-093": {
     "id": "EMP-093",
     "photo": null,
     "surname": "VILLAREAL",
@@ -6418,7 +6416,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-094": {
     "id": "EMP-094",
     "photo": null,
     "surname": "PUNCION",
@@ -6487,7 +6485,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-095": {
     "id": "EMP-095",
     "photo": null,
     "surname": "LERIO",
@@ -6556,7 +6554,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-096": {
     "id": "EMP-096",
     "photo": null,
     "surname": "GUSTILO",
@@ -6625,7 +6623,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-097": {
     "id": "EMP-097",
     "photo": null,
     "surname": "MAGBANUA",
@@ -6694,7 +6692,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-098": {
     "id": "EMP-098",
     "photo": null,
     "surname": "MARTINEZ",
@@ -6763,7 +6761,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-099": {
     "id": "EMP-099",
     "photo": null,
     "surname": "ACADEMIA",
@@ -6832,7 +6830,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-100": {
     "id": "EMP-100",
     "photo": null,
     "surname": "DEGALLADO",
@@ -6901,7 +6899,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-101": {
     "id": "EMP-101",
     "photo": null,
     "surname": "REYES",
@@ -6970,7 +6968,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-102": {
     "id": "EMP-102",
     "photo": null,
     "surname": "RIVERA",
@@ -7039,7 +7037,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-103": {
     "id": "EMP-103",
     "photo": null,
     "surname": "POTATO",
@@ -7108,7 +7106,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-104": {
     "id": "EMP-104",
     "photo": null,
     "surname": "LIZADA",
@@ -7177,7 +7175,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-105": {
     "id": "EMP-105",
     "photo": null,
     "surname": "LAGUING",
@@ -7246,7 +7244,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-106": {
     "id": "EMP-106",
     "photo": null,
     "surname": "LERONA",
@@ -7315,7 +7313,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-107": {
     "id": "EMP-107",
     "photo": null,
     "surname": "MANSILLA",
@@ -7384,7 +7382,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-108": {
     "id": "EMP-108",
     "photo": null,
     "surname": "LAGO",
@@ -7453,7 +7451,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-109": {
     "id": "EMP-109",
     "photo": null,
     "surname": "MAGALLANES",
@@ -7522,7 +7520,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-110": {
     "id": "EMP-110",
     "photo": null,
     "surname": "GARCIA",
@@ -7591,7 +7589,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-111": {
     "id": "EMP-111",
     "photo": null,
     "surname": "BERDADEZ",
@@ -7660,7 +7658,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-112": {
     "id": "EMP-112",
     "photo": null,
     "surname": "OCBEÑA",
@@ -7729,7 +7727,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-113": {
     "id": "EMP-113",
     "photo": null,
     "surname": "GREGORIO",
@@ -7798,7 +7796,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-114": {
     "id": "EMP-114",
     "photo": null,
     "surname": "LUSABIA",
@@ -7867,7 +7865,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-115": {
     "id": "EMP-115",
     "photo": null,
     "surname": "BOLIDO",
@@ -7936,7 +7934,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-116": {
     "id": "EMP-116",
     "photo": null,
     "surname": "CANDIDO",
@@ -8005,7 +8003,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-117": {
     "id": "EMP-117",
     "photo": null,
     "surname": "MONTORIO",
@@ -8074,7 +8072,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-118": {
     "id": "EMP-118",
     "photo": null,
     "surname": "GOLEZ",
@@ -8143,7 +8141,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-119": {
     "id": "EMP-119",
     "photo": null,
     "surname": "LABAO",
@@ -8212,7 +8210,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-120": {
     "id": "EMP-120",
     "photo": null,
     "surname": "VILLORENTE",
@@ -8281,7 +8279,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-121": {
     "id": "EMP-121",
     "photo": null,
     "surname": "LOZADA",
@@ -8350,7 +8348,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-122": {
     "id": "EMP-122",
     "photo": null,
     "surname": "CLARITE",
@@ -8419,7 +8417,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-123": {
     "id": "EMP-123",
     "photo": null,
     "surname": "DELA CRUZ",
@@ -8488,7 +8486,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-124": {
     "id": "EMP-124",
     "photo": null,
     "surname": "VILLANUEVA",
@@ -8557,7 +8555,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-125": {
     "id": "EMP-125",
     "photo": null,
     "surname": "ARTEZA",
@@ -8626,7 +8624,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-126": {
     "id": "EMP-126",
     "photo": null,
     "surname": "APRUEBO",
@@ -8695,7 +8693,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-127": {
     "id": "EMP-127",
     "photo": null,
     "surname": "SALAYA",
@@ -8764,7 +8762,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-128": {
     "id": "EMP-128",
     "photo": null,
     "surname": "LEDESMA",
@@ -8833,7 +8831,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-129": {
     "id": "EMP-129",
     "photo": null,
     "surname": "LAUNIO MA",
@@ -8902,7 +8900,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-130": {
     "id": "EMP-130",
     "photo": null,
     "surname": "LLENA",
@@ -8971,7 +8969,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-131": {
     "id": "EMP-131",
     "photo": null,
     "surname": "DE DOMINGO",
@@ -9040,7 +9038,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-132": {
     "id": "EMP-132",
     "photo": null,
     "surname": "LUNAS",
@@ -9109,7 +9107,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-133": {
     "id": "EMP-133",
     "photo": null,
     "surname": "CALFOFORO",
@@ -9178,7 +9176,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-134": {
     "id": "EMP-134",
     "photo": null,
     "surname": "DILE",
@@ -9247,7 +9245,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-135": {
     "id": "EMP-135",
     "photo": null,
     "surname": "LABAO",
@@ -9316,7 +9314,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-136": {
     "id": "EMP-136",
     "photo": null,
     "surname": "SELORIO",
@@ -9385,7 +9383,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-137": {
     "id": "EMP-137",
     "photo": null,
     "surname": "LEDESMA",
@@ -9454,7 +9452,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-138": {
     "id": "EMP-138",
     "photo": null,
     "surname": "TALABAN",
@@ -9523,7 +9521,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-139": {
     "id": "EMP-139",
     "photo": null,
     "surname": "MESIAS",
@@ -9592,7 +9590,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-140": {
     "id": "EMP-140",
     "photo": null,
     "surname": "DELA CRUZ",
@@ -9661,7 +9659,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-141": {
     "id": "EMP-141",
     "photo": null,
     "surname": "GREGORE",
@@ -9730,7 +9728,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-142": {
     "id": "EMP-142",
     "photo": null,
     "surname": "LABO",
@@ -9799,7 +9797,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-143": {
     "id": "EMP-143",
     "photo": null,
     "surname": "LEONARDO",
@@ -9868,7 +9866,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-144": {
     "id": "EMP-144",
     "photo": null,
     "surname": "BORRES",
@@ -9937,7 +9935,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-145": {
     "id": "EMP-145",
     "photo": null,
     "surname": "RICAÑA",
@@ -10006,7 +10004,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-146": {
     "id": "EMP-146",
     "photo": null,
     "surname": "SOLIS",
@@ -10075,7 +10073,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-147": {
     "id": "EMP-147",
     "photo": null,
     "surname": "LUCES",
@@ -10144,7 +10142,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-148": {
     "id": "EMP-148",
     "photo": null,
     "surname": "LAURILLA",
@@ -10213,7 +10211,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-149": {
     "id": "EMP-149",
     "photo": null,
     "surname": "ALAYON",
@@ -10282,7 +10280,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-150": {
     "id": "EMP-150",
     "photo": null,
     "surname": "SIBUG",
@@ -10351,7 +10349,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-151": {
     "id": "EMP-151",
     "photo": null,
     "surname": "DELACRUZ",
@@ -10420,7 +10418,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-152": {
     "id": "EMP-152",
     "photo": null,
     "surname": "LECCIO CHERYL A",
@@ -10489,7 +10487,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-153": {
     "id": "EMP-153",
     "photo": null,
     "surname": "PATRIARCA",
@@ -10558,7 +10556,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-154": {
     "id": "EMP-154",
     "photo": null,
     "surname": "BERGANIO",
@@ -10627,7 +10625,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-155": {
     "id": "EMP-155",
     "photo": null,
     "surname": "DELA",
@@ -10696,7 +10694,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-156": {
     "id": "EMP-156",
     "photo": null,
     "surname": "OSIAS",
@@ -10765,7 +10763,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-157": {
     "id": "EMP-157",
     "photo": null,
     "surname": "GALLARDO",
@@ -10834,7 +10832,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-158": {
     "id": "EMP-158",
     "photo": null,
     "surname": "BERTE",
@@ -10903,7 +10901,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-159": {
     "id": "EMP-159",
     "photo": null,
     "surname": "CRISOSTOMO",
@@ -10972,7 +10970,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-160": {
     "id": "EMP-160",
     "photo": null,
     "surname": "TERESA A",
@@ -11041,7 +11039,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-161": {
     "id": "EMP-161",
     "photo": null,
     "surname": "ALAYON",
@@ -11110,7 +11108,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-162": {
     "id": "EMP-162",
     "photo": null,
     "surname": "VICTORIANO",
@@ -11179,7 +11177,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-163": {
     "id": "EMP-163",
     "photo": null,
     "surname": "ADIO",
@@ -11248,7 +11246,7 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   },
-  {
+  "EMP-164": {
     "id": "EMP-164",
     "photo": null,
     "surname": "DEGOMA",
@@ -11317,4 +11315,4 @@ export const DEMO_EMPLOYEES: Employee[] = [
     ],
     "attachments": []
   }
-];
+}

@@ -4,21 +4,56 @@ import { Employee } from '../types/employee';
 const CACHE_KEY = 'gers_employees_cache';
 const QUEUE_KEY = 'gers_sync_queue';
 
-export const getWorkMode = (): 'local' | 'online' => {
-  try {
-    return (localStorage.getItem('gers_work_mode') as 'local' | 'online') || 'local';
-  } catch (e) {
-    return 'local';
+export type WorkMode = 'auto' | 'local' | 'online';
+
+export const getWorkMode = (): WorkMode => {
+  return 'auto';
+};
+
+export const setWorkMode = (mode: WorkMode): void => {
+  window.dispatchEvent(new CustomEvent('gers_work_mode_change', { detail: 'auto' }));
+};
+
+// In-memory server reachability cache
+let lastServerReachable = true;
+
+export const setServerReachable = (reachable: boolean): void => {
+  if (lastServerReachable !== reachable) {
+    lastServerReachable = reachable;
+    window.dispatchEvent(new CustomEvent('gers_server_reachability_change', { detail: reachable }));
   }
 };
 
-export const setWorkMode = (mode: 'local' | 'online'): void => {
-  try {
-    localStorage.setItem('gers_work_mode', mode);
-  } catch (e) {
-    console.error(e);
+export const getServerReachable = (): boolean => {
+  return lastServerReachable;
+};
+
+export const checkServerConnection = async (): Promise<boolean> => {
+  if (getWorkMode() === 'local') {
+    setServerReachable(false);
+    return false;
   }
-  window.dispatchEvent(new CustomEvent('gers_work_mode_change', { detail: mode }));
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    const response = await fetch('/api/health', { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (response.ok) {
+      const wasReachable = lastServerReachable;
+      setServerReachable(true);
+      // If we just reconnected and we have items in sync queue, automatically trigger a sync!
+      if (!wasReachable && getSyncQueue().length > 0) {
+        syncOfflineData();
+      }
+      return true;
+    } else {
+      setServerReachable(false);
+      return false;
+    }
+  } catch (e) {
+    setServerReachable(false);
+    return false;
+  }
 };
 
 export interface SyncItem {
@@ -85,6 +120,12 @@ export const addToSyncQueue = (item: Omit<SyncItem, 'timestamp'>): void => {
   window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
 };
 
+export const removeFromSyncQueue = (id: string): void => {
+  const queue = getSyncQueue().filter(q => q.id !== id);
+  saveSyncQueue(queue);
+  window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
+};
+
 // Flag to prevent overlapping sync operations
 let isSyncing = false;
 
@@ -109,8 +150,13 @@ export const syncOfflineData = async (
   try {
     const sortedQueue = [...queue].sort((a, b) => a.timestamp - b.timestamp);
     const failedItems: SyncItem[] = [];
+    let connectionDropped = false;
 
     for (const item of sortedQueue) {
+      if (connectionDropped) {
+        failedItems.push(item);
+        continue;
+      }
       try {
         if (item.type === 'PUT') {
           if (!item.data) throw new Error('No data provided for PUT operation');
@@ -129,6 +175,10 @@ export const syncOfflineData = async (
       } catch (err) {
         console.error(`Failed to sync item ${item.id}`, err);
         failedItems.push(item);
+        if (getWorkMode() === 'auto') {
+          connectionDropped = true;
+          setServerReachable(false);
+        }
       }
     }
 
@@ -144,6 +194,7 @@ export const syncOfflineData = async (
         if (latestResponse.ok) {
           const latestData = await latestResponse.json();
           saveLocalCache(latestData);
+          setServerReachable(true);
           window.dispatchEvent(new CustomEvent('gers_data_synced', { detail: latestData }));
         }
       } catch (e) {
@@ -160,29 +211,35 @@ export const syncOfflineData = async (
 
 // Check connection status
 export const isOnline = (): boolean => {
-  return getWorkMode() === 'online' && navigator.onLine;
+  const mode = getWorkMode();
+  if (mode === 'local') return false;
+  if (mode === 'online') return navigator.onLine;
+  return navigator.onLine && lastServerReachable;
 };
 
 // Main API wrapper functions with transparent offline fallback
 
 export const dbGetAll = async (): Promise<Employee[]> => {
-  if (getWorkMode() === 'local') {
-    const cached = getLocalCache();
-    return cached;
+  const mode = getWorkMode();
+  if (mode === 'local') {
+    return getLocalCache();
+  }
+  if (mode === 'auto' && (!navigator.onLine || !lastServerReachable)) {
+    return getLocalCache();
   }
   try {
     const response = await fetch('/api/employees');
     if (!response.ok) throw new Error('Failed to fetch employees');
     const data = await response.json();
     saveLocalCache(data);
+    setServerReachable(true);
     return data;
   } catch (error) {
     console.warn('Failed to fetch employees from server, falling back to local cache:', error);
-    const cached = getLocalCache();
-    if (cached.length > 0) {
-      return cached;
+    if (mode === 'auto') {
+      setServerReachable(false);
     }
-    throw error;
+    return getLocalCache();
   }
 };
 
@@ -197,7 +254,12 @@ export const dbPut = async (emp: Employee): Promise<void> => {
   }
   saveLocalCache(cache);
 
-  if (getWorkMode() === 'local') {
+  const mode = getWorkMode();
+  if (mode === 'local') {
+    addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
+    return;
+  }
+  if (mode === 'auto' && (!navigator.onLine || !lastServerReachable)) {
     addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
     return;
   }
@@ -209,11 +271,16 @@ export const dbPut = async (emp: Employee): Promise<void> => {
       body: JSON.stringify(emp)
     });
     if (!response.ok) throw new Error('Failed to save employee');
+    setServerReachable(true);
+    removeFromSyncQueue(emp.id);
     if (getSyncQueue().length > 0) {
       syncOfflineData();
     }
   } catch (error) {
     console.warn(`Failed to save employee ${emp.id} to server. Saving offline.`, error);
+    if (mode === 'auto') {
+      setServerReachable(false);
+    }
     addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
   }
 };
@@ -223,7 +290,12 @@ export const dbDelete = async (id: string): Promise<void> => {
   const cache = getLocalCache().filter(e => e.id !== id);
   saveLocalCache(cache);
 
-  if (getWorkMode() === 'local') {
+  const mode = getWorkMode();
+  if (mode === 'local') {
+    addToSyncQueue({ id, type: 'DELETE' });
+    return;
+  }
+  if (mode === 'auto' && (!navigator.onLine || !lastServerReachable)) {
     addToSyncQueue({ id, type: 'DELETE' });
     return;
   }
@@ -233,11 +305,16 @@ export const dbDelete = async (id: string): Promise<void> => {
       method: 'DELETE'
     });
     if (!response.ok) throw new Error('Failed to delete employee');
+    setServerReachable(true);
+    removeFromSyncQueue(id);
     if (getSyncQueue().length > 0) {
       syncOfflineData();
     }
   } catch (error) {
     console.warn(`Failed to delete employee ${id} on server. Queueing offline delete.`, error);
+    if (mode === 'auto') {
+      setServerReachable(false);
+    }
     addToSyncQueue({ id, type: 'DELETE' });
   }
 };

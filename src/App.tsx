@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Employee } from './types/employee';
-import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode } from './services/db';
+import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable } from './services/db';
 import { DEMO_EMPLOYEES } from './services/demoData';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
@@ -28,7 +28,7 @@ export default function App() {
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
 
   // Offline Sync States
-  const [workMode, setWorkModeState] = useState<'local' | 'online'>(getWorkMode());
+  const [workMode, setWorkModeState] = useState<WorkMode>(getWorkMode());
   const [isOnlineState, setIsOnlineState] = useState(navigator.onLine);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [isSyncingState, setIsSyncingState] = useState(false);
@@ -74,15 +74,18 @@ export default function App() {
     window.addEventListener('gers_drive_status_changed', handleDriveStatusChanged);
 
     // Setup online/offline listeners & sync triggers
-    const updateOnlineStatus = () => {
+    const updateOnlineStatus = async () => {
       const online = navigator.onLine;
-      setIsOnlineState(online);
-      if (getWorkMode() === 'online') {
-        if (online) {
-          addToast('Connection restored. Syncing local changes...', 'info');
+      const reachable = await checkServerConnection();
+      setIsOnlineState(online && reachable);
+      
+      const mode = getWorkMode();
+      if (mode !== 'local') {
+        if (online && reachable) {
+          addToast('Network connection detected. Syncing local changes...', 'info');
           triggerSync();
         } else {
-          addToast('Connection lost. Working offline.', 'info');
+          addToast('Network connection lost. Saving changes locally.', 'info');
         }
       }
     };
@@ -117,12 +120,24 @@ export default function App() {
     const handleWorkModeChanged = (e: any) => {
       const newMode = e.detail;
       setWorkModeState(newMode);
-      if (newMode === 'online') {
-        triggerSync();
+      if (newMode !== 'local') {
+        checkServerConnection().then(reachable => {
+          setIsOnlineState(navigator.onLine && reachable);
+          if (navigator.onLine && reachable) {
+            triggerSync();
+          } else {
+            loadEmployees();
+          }
+        });
       } else {
+        setIsOnlineState(false);
         addToast('Switched to Local Device mode. Saving offline.', 'info');
         loadEmployees();
       }
+    };
+
+    const handleReachabilityChange = (e: any) => {
+      setIsOnlineState(navigator.onLine && e.detail);
     };
 
     window.addEventListener('online', updateOnlineStatus);
@@ -130,21 +145,45 @@ export default function App() {
     window.addEventListener('gers_sync_status_change', handleSyncStatusChange);
     window.addEventListener('gers_data_synced', handleDataSynced);
     window.addEventListener('gers_work_mode_change', handleWorkModeChanged);
+    window.addEventListener('gers_server_reachability_change', handleReachabilityChange);
+
+    // Periodic check to verify server reachability and trigger sync if back online
+    const checkServerInterval = setInterval(async () => {
+      const mode = getWorkMode();
+      if (mode !== 'local') {
+        const isCurrentlyOnline = navigator.onLine;
+        const wasReachable = getServerReachable();
+        const nowReachable = await checkServerConnection();
+        setIsOnlineState(isCurrentlyOnline && nowReachable);
+
+        if (mode === 'auto') {
+          if (isCurrentlyOnline && nowReachable && !wasReachable) {
+            addToast('Government server connection restored. Synchronizing...', 'success');
+            triggerSync();
+          }
+        }
+      }
+    }, 5000);
 
     // Initial check
     setSyncQueueCount(getSyncQueue().length);
-    if (getWorkMode() === 'online' && navigator.onLine && getSyncQueue().length > 0) {
-      triggerSync();
-    }
+    checkServerConnection().then(reachable => {
+      setIsOnlineState(navigator.onLine && reachable);
+      if (getWorkMode() !== 'local' && navigator.onLine && reachable && getSyncQueue().length > 0) {
+        triggerSync();
+      }
+    });
 
     return () => {
       unsubscribe();
+      clearInterval(checkServerInterval);
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
       window.removeEventListener('gers_sync_status_change', handleSyncStatusChange);
       window.removeEventListener('gers_data_synced', handleDataSynced);
       window.removeEventListener('gers_drive_status_changed', handleDriveStatusChanged);
       window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
+      window.removeEventListener('gers_server_reachability_change', handleReachabilityChange);
     };
   }, []);
 
@@ -249,61 +288,16 @@ export default function App() {
               <h1 className="font-playfair text-xl md:text-2xl font-bold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
                 GERS <span className="text-[var(--gold)] font-normal hidden lg:inline">| Government Employee Record System</span>
                 
-                {/* Work Mode Selector Toggle */}
-                <div className="inline-flex items-center bg-black/20 border border-white/10 rounded-lg p-0.5 shrink-0 text-[10px] font-bold gap-0.5 ml-2">
-                  <button
-                    onClick={() => setWorkMode('local')}
-                    className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
-                      workMode === 'local'
-                        ? 'bg-[var(--gold)] text-[var(--navy)] shadow-sm'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                    title="Save records locally on this laptop (Offline mode)"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${workMode === 'local' ? 'bg-[var(--navy)]' : 'bg-slate-400'}`} />
-                    Local Laptop
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (!navigator.onLine) {
-                        addToast('Cannot switch to cloud mode: No internet connection detected.', 'error');
-                        return;
-                      }
-                      setWorkMode('online');
-                    }}
-                    className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
-                      workMode === 'online'
-                        ? 'bg-emerald-600 text-white shadow-sm'
-                        : 'text-slate-300 hover:text-white'
-                    }`}
-                    title="Connect to server database and sync records"
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${workMode === 'online' ? 'bg-emerald-300 animate-pulse' : 'bg-slate-400'}`} />
-                    Cloud Sync
-                    {syncQueueCount > 0 && (
-                      <span className="bg-amber-500 text-white text-[9px] px-1 rounded-full font-black animate-pulse">
-                        {syncQueueCount}
-                      </span>
-                    )}
-                  </button>
-                </div>
-
                 {/* Status Indicator */}
-                {workMode === 'online' ? (
-                  isOnlineState ? (
-                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet">
-                      <Wifi size={10} className="text-emerald-400 animate-pulse" />
-                      Online
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="No internet connection. Waiting to reconnect.">
-                      <WifiOff size={10} className="text-rose-400" />
-                      Connection Lost
-                    </span>
-                  )
+                {isOnlineState ? (
+                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet and server">
+                    <Wifi size={10} className="text-emerald-400 animate-pulse" />
+                    Online
+                  </span>
                 ) : (
-                  <span className="px-2 py-0.5 bg-slate-500/15 text-slate-300 border border-slate-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Working fully locally inside your browser">
-                    Local Device Mode
+                  <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="No internet connection or server unreachable. Changes are saved locally.">
+                    <WifiOff size={10} className="text-rose-400" />
+                    Offline Mode
                   </span>
                 )}
 

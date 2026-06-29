@@ -105,6 +105,10 @@ app.use(async (req, res, next) => {
 });
 
 // API Routes
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
 app.get('/api/employees', async (req, res) => {
   try {
     const keys = Object.keys(dbCache).filter(key => key !== 'google_drive_config');
