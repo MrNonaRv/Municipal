@@ -216,6 +216,20 @@ async function saveDb() {
 }
 
 const app = express();
+
+// Normalize req.url for Vercel serverless deployments
+app.use((req, res, next) => {
+  const originalUrl = req.url;
+  if (!req.url.startsWith('/api') && req.url !== '/' && !req.url.startsWith('/_')) {
+    // If Vercel stripped the '/api' prefix, prepend it so Express route matching succeeds
+    req.url = '/api' + req.url;
+    console.log(`[Vercel Route Normalizer] Normalized URL: ${originalUrl} -> ${req.url}`);
+  } else {
+    console.log(`[Route Monitor] Request: ${req.method} ${req.url}`);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '50mb' }));
 
 let dbLoaded = false;
