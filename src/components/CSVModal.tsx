@@ -1,22 +1,39 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Employee } from '../types/employee';
 import { generateEmptyEmployee } from '../utils/helpers';
-import { Download, Upload, FileJson, FileSpreadsheet, CheckSquare, Square, X } from 'lucide-react';
+import { Download, Upload, FileJson, FileSpreadsheet, CheckSquare, Square, X, Cloud, Key, Shield, HelpCircle, Check, Lock } from 'lucide-react';
+import { checkDriveStatus, saveServiceAccountConfig, logout as unlinkDrive, GoogleDriveStatus } from '../services/googleDrive';
 
 interface Props {
   onClose: () => void;
   onImport: (data: Employee[]) => Promise<void> | void;
   employees: Employee[];
+  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive';
 }
 
-export default function CSVModal({ onClose, onImport, employees }: Props) {
-  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export'>('bulk');
+export default function CSVModal({ onClose, onImport, employees, initialTab }: Props) {
+  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>(initialTab || 'bulk');
   const [previewData, setPreviewData] = useState<Employee[]>([]);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Google Drive Config State
+  const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
+  const [saKey, setSaKey] = useState('');
+  const [driveFolderId, setDriveFolderId] = useState('');
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  useEffect(() => {
+    checkDriveStatus().then(status => {
+      setDriveStatus(status);
+      if (status.connected && status.folderId) {
+        setDriveFolderId(status.folderId);
+      }
+    });
+  }, [activeTab]);
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -286,6 +303,16 @@ export default function CSVModal({ onClose, onImport, employees }: Props) {
           >
             <Download size={16}/> Export
           </button>
+          <button 
+            role="tab" 
+            id="tab-gdrive"
+            aria-controls="panel-gdrive"
+            aria-selected={activeTab === 'gdrive'} 
+            onClick={() => setActiveTab('gdrive')} 
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'gdrive' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
+          >
+            <Cloud size={16}/> Google Drive
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
@@ -413,6 +440,150 @@ export default function CSVModal({ onClose, onImport, employees }: Props) {
                   <FileJson size={18}/> Export as JSON
                 </button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'gdrive' && (
+            <div className="space-y-6">
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
+                <h3 className="font-bold text-[var(--navy)] flex items-center gap-2 mb-2 text-sm">
+                  <Cloud size={18} className="text-blue-500" />
+                  System-Wide Google Drive Storage
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Establish a single, hardcoded Google Drive connection. Once set up, all scanned employee documents
+                  will save directly to your organization's Google Drive. All users can instantly upload and access
+                  files without encountering domain authorization issues on Vercel.
+                </p>
+              </div>
+
+              {driveStatus?.connected ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+                    <div className="p-2 bg-emerald-500 text-white rounded-full">
+                      <Check size={16} />
+                    </div>
+                    <div className="space-y-1 flex-1">
+                      <div className="font-bold text-emerald-800 text-sm">System Storage Active</div>
+                      <div className="text-xs text-emerald-700">
+                        <span className="font-medium">Service Account Email:</span>{' '}
+                        <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{driveStatus.email}</code>
+                      </div>
+                      {driveStatus.folderId && (
+                        <div className="text-xs text-emerald-700">
+                          <span className="font-medium">Target Folder ID:</span>{' '}
+                          <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{driveStatus.folderId}</code>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-200/50 text-xs text-blue-800 space-y-1.5 font-sans">
+                    <div className="font-bold flex items-center gap-1.5 text-blue-900">
+                      <Shield size={14} /> Security and Authorization
+                    </div>
+                    <p>
+                      Files are securely transmitted server-to-server using encrypted credentials in your database.
+                      Remember to share your Google Drive Folder with the service account email above so it can read and write files.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (confirm('Are you sure you want to unlink the system Google Drive storage? Scanned files will no longer back up to Drive.')) {
+                        try {
+                          await unlinkDrive();
+                          const status = await checkDriveStatus();
+                          setDriveStatus(status);
+                          setError(null);
+                        } catch (err: any) {
+                          setError(err.message || 'Failed to unlink');
+                        }
+                      }
+                    }}
+                    className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-sm"
+                  >
+                    Disconnect GDrive Storage
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Configure System Connection</div>
+                  
+                  <div className="space-y-3">
+                    <div className="space-y-1 font-sans">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                        Service Account JSON Key
+                      </label>
+                      <textarea
+                        value={saKey}
+                        onChange={(e) => setSaKey(e.target.value)}
+                        placeholder='{"type": "service_account", "project_id": "...", ...}'
+                        rows={6}
+                        className="w-full border p-2.5 rounded font-mono text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="space-y-1 font-sans">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                        Google Drive Folder ID (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={driveFolderId}
+                        onChange={(e) => setDriveFolderId(e.target.value)}
+                        placeholder="e.g. 1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+                        className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
+                      />
+                      <p className="text-[10px] text-slate-500 font-sans">
+                        Leave blank to upload to the root of the Service Account's drive.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={async () => {
+                      if (!saKey.trim()) {
+                        setError('Please paste your Google Service Account JSON key.');
+                        return;
+                      }
+                      setIsSavingConfig(true);
+                      setError(null);
+                      try {
+                        await saveServiceAccountConfig(saKey, driveFolderId);
+                        const status = await checkDriveStatus();
+                        setDriveStatus(status);
+                        setSaKey('');
+                        // Trigger a custom event so other components update immediately
+                        window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { detail: status }));
+                      } catch (err: any) {
+                        setError(err.message || 'Invalid service account or network error');
+                      } finally {
+                        setIsSavingConfig(false);
+                      }
+                    }}
+                    disabled={isSavingConfig}
+                    className="w-full py-2.5 bg-[var(--navy)] text-white font-bold rounded-lg hover:bg-opacity-90 disabled:opacity-50 transition-all flex justify-center items-center gap-2 text-sm"
+                  >
+                    {isSavingConfig ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Key size={16} />}
+                    {isSavingConfig ? 'Saving Configuration...' : 'Save GDrive Credentials'}
+                  </button>
+
+                  <div className="bg-slate-100 p-4 rounded-lg border text-xs text-slate-600 space-y-2 font-sans">
+                    <div className="font-bold text-slate-700 flex items-center gap-1">
+                      <HelpCircle size={14} /> Quick Setup Guide
+                    </div>
+                    <ol className="list-decimal pl-4 space-y-1 text-slate-500">
+                      <li>Go to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Google Cloud Console</a>.</li>
+                      <li>Create a new Project, enable the <strong className="text-slate-700">Google Drive API</strong>.</li>
+                      <li>Go to <strong className="text-slate-700">IAM & Admin &gt; Service Accounts</strong>, create a Service Account.</li>
+                      <li>Select the account, click <strong className="text-slate-700">Keys &gt; Add Key &gt; Create New Key &gt; JSON</strong> and download it.</li>
+                      <li>Paste the entire JSON file contents into the field above.</li>
+                      <li><strong>Important:</strong> Create a folder on your personal Google Drive, and share it with the Service Account email (e.g. <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">service-account@...</code>) giving it <strong className="text-slate-700">Editor</strong> access!</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

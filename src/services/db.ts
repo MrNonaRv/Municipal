@@ -4,6 +4,23 @@ import { Employee } from '../types/employee';
 const CACHE_KEY = 'gers_employees_cache';
 const QUEUE_KEY = 'gers_sync_queue';
 
+export const getWorkMode = (): 'local' | 'online' => {
+  try {
+    return (localStorage.getItem('gers_work_mode') as 'local' | 'online') || 'local';
+  } catch (e) {
+    return 'local';
+  }
+};
+
+export const setWorkMode = (mode: 'local' | 'online'): void => {
+  try {
+    localStorage.setItem('gers_work_mode', mode);
+  } catch (e) {
+    console.error(e);
+  }
+  window.dispatchEvent(new CustomEvent('gers_work_mode_change', { detail: mode }));
+};
+
 export interface SyncItem {
   id: string;
   type: 'PUT' | 'DELETE';
@@ -75,6 +92,10 @@ let isSyncing = false;
 export const syncOfflineData = async (
   onProgress?: (status: 'syncing' | 'success' | 'error', pendingCount: number) => void
 ): Promise<void> => {
+  if (getWorkMode() === 'local') {
+    if (onProgress) onProgress('success', getSyncQueue().length);
+    return;
+  }
   if (isSyncing) return;
   const queue = getSyncQueue();
   if (queue.length === 0) {
@@ -139,12 +160,16 @@ export const syncOfflineData = async (
 
 // Check connection status
 export const isOnline = (): boolean => {
-  return navigator.onLine;
+  return getWorkMode() === 'online' && navigator.onLine;
 };
 
 // Main API wrapper functions with transparent offline fallback
 
 export const dbGetAll = async (): Promise<Employee[]> => {
+  if (getWorkMode() === 'local') {
+    const cached = getLocalCache();
+    return cached;
+  }
   try {
     const response = await fetch('/api/employees');
     if (!response.ok) throw new Error('Failed to fetch employees');
@@ -172,6 +197,11 @@ export const dbPut = async (emp: Employee): Promise<void> => {
   }
   saveLocalCache(cache);
 
+  if (getWorkMode() === 'local') {
+    addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
+    return;
+  }
+
   try {
     const response = await fetch('/api/employees', {
       method: 'POST',
@@ -192,6 +222,11 @@ export const dbDelete = async (id: string): Promise<void> => {
   // Update local cache immediately
   const cache = getLocalCache().filter(e => e.id !== id);
   saveLocalCache(cache);
+
+  if (getWorkMode() === 'local') {
+    addToSyncQueue({ id, type: 'DELETE' });
+    return;
+  }
 
   try {
     const response = await fetch(`/api/employees/${id}`, {

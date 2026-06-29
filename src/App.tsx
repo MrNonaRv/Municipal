@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Employee } from './types/employee';
-import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline } from './services/db';
+import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode } from './services/db';
 import { DEMO_EMPLOYEES } from './services/demoData';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
@@ -28,6 +28,7 @@ export default function App() {
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
 
   // Offline Sync States
+  const [workMode, setWorkModeState] = useState<'local' | 'online'>(getWorkMode());
   const [isOnlineState, setIsOnlineState] = useState(navigator.onLine);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [isSyncingState, setIsSyncingState] = useState(false);
@@ -37,6 +38,7 @@ export default function App() {
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const [editTab, setEditTab] = useState<'service' | 'attachments'>('service');
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
+  const [csvModalTab, setCsvModalTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>('bulk');
   const [deletingEmp, setDeletingEmp] = useState<Employee | null>(null);
 
   const { toasts, addToast, removeToast } = useToast();
@@ -60,19 +62,33 @@ export default function App() {
       }
     );
 
+    // Setup listener for custom system drive status change
+    const handleDriveStatusChanged = (e: any) => {
+      setIsDriveConnected(e.detail.connected);
+      if (e.detail.connected) {
+        setDriveUser({ email: e.detail.email });
+      } else {
+        setDriveUser(null);
+      }
+    };
+    window.addEventListener('gers_drive_status_changed', handleDriveStatusChanged);
+
     // Setup online/offline listeners & sync triggers
     const updateOnlineStatus = () => {
       const online = navigator.onLine;
       setIsOnlineState(online);
-      if (online) {
-        addToast('Connection restored. Syncing local changes...', 'info');
-        triggerSync();
-      } else {
-        addToast('Connection lost. Working offline.', 'info');
+      if (getWorkMode() === 'online') {
+        if (online) {
+          addToast('Connection restored. Syncing local changes...', 'info');
+          triggerSync();
+        } else {
+          addToast('Connection lost. Working offline.', 'info');
+        }
       }
     };
 
     const triggerSync = () => {
+      if (getWorkMode() === 'local') return;
       syncOfflineData((status, pendingCount) => {
         setSyncQueueCount(pendingCount);
         if (status === 'syncing') {
@@ -80,6 +96,7 @@ export default function App() {
         } else if (status === 'success') {
           setIsSyncingState(false);
           addToast('All local changes synchronized with server!', 'success');
+          loadEmployees();
         } else if (status === 'error') {
           setIsSyncingState(false);
           addToast(`Failed to sync some changes (${pendingCount} pending)`, 'error');
@@ -97,14 +114,26 @@ export default function App() {
       }
     };
 
+    const handleWorkModeChanged = (e: any) => {
+      const newMode = e.detail;
+      setWorkModeState(newMode);
+      if (newMode === 'online') {
+        triggerSync();
+      } else {
+        addToast('Switched to Local Device mode. Saving offline.', 'info');
+        loadEmployees();
+      }
+    };
+
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
     window.addEventListener('gers_sync_status_change', handleSyncStatusChange);
     window.addEventListener('gers_data_synced', handleDataSynced);
+    window.addEventListener('gers_work_mode_change', handleWorkModeChanged);
 
     // Initial check
     setSyncQueueCount(getSyncQueue().length);
-    if (navigator.onLine && getSyncQueue().length > 0) {
+    if (getWorkMode() === 'online' && navigator.onLine && getSyncQueue().length > 0) {
       triggerSync();
     }
 
@@ -114,39 +143,14 @@ export default function App() {
       window.removeEventListener('offline', updateOnlineStatus);
       window.removeEventListener('gers_sync_status_change', handleSyncStatusChange);
       window.removeEventListener('gers_data_synced', handleDataSynced);
+      window.removeEventListener('gers_drive_status_changed', handleDriveStatusChanged);
+      window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
     };
   }, []);
 
-  const handleConnectDrive = async () => {
-    if (isDriveConnected) {
-      setIsDriveConnecting(true);
-      try {
-        await logout();
-        setIsDriveConnected(false);
-        setDriveUser(null);
-        addToast('Google Drive storage unlinked', 'info');
-      } catch (err) {
-        console.error("Failed to disconnect Google Drive", err);
-        addToast('Failed to disconnect Google Drive', 'error');
-      } finally {
-        setIsDriveConnecting(false);
-      }
-    } else {
-      setIsDriveConnecting(true);
-      try {
-        const result = await googleSignIn();
-        if (result) {
-          setIsDriveConnected(true);
-          setDriveUser(result.user);
-          addToast('Google Drive successfully linked as automated storage!', 'success');
-        }
-      } catch (err: any) {
-        console.error("Failed to connect Google Drive", err);
-        addToast(`Google Drive connection failed: ${err.message || err}`, 'error');
-      } finally {
-        setIsDriveConnecting(false);
-      }
-    }
+  const handleConnectDrive = () => {
+    setCsvModalTab('gdrive');
+    setIsCSVModalOpen(true);
   };
 
   const loadEmployees = async () => {
@@ -245,32 +249,70 @@ export default function App() {
               <h1 className="font-playfair text-xl md:text-2xl font-bold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
                 GERS <span className="text-[var(--gold)] font-normal hidden lg:inline">| Government Employee Record System</span>
                 
-                {/* Connection Status Badge */}
-                {isOnlineState ? (
-                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet">
-                    <Wifi size={10} className="text-emerald-400 animate-pulse" />
-                    Online
-                  </span>
+                {/* Work Mode Selector Toggle */}
+                <div className="inline-flex items-center bg-black/20 border border-white/10 rounded-lg p-0.5 shrink-0 text-[10px] font-bold gap-0.5 ml-2">
+                  <button
+                    onClick={() => setWorkMode('local')}
+                    className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
+                      workMode === 'local'
+                        ? 'bg-[var(--gold)] text-[var(--navy)] shadow-sm'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                    title="Save records locally on this laptop (Offline mode)"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${workMode === 'local' ? 'bg-[var(--navy)]' : 'bg-slate-400'}`} />
+                    Local Laptop
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!navigator.onLine) {
+                        addToast('Cannot switch to cloud mode: No internet connection detected.', 'error');
+                        return;
+                      }
+                      setWorkMode('online');
+                    }}
+                    className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
+                      workMode === 'online'
+                        ? 'bg-emerald-600 text-white shadow-sm'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                    title="Connect to server database and sync records"
+                  >
+                    <span className={`w-1.5 h-1.5 rounded-full ${workMode === 'online' ? 'bg-emerald-300 animate-pulse' : 'bg-slate-400'}`} />
+                    Cloud Sync
+                    {syncQueueCount > 0 && (
+                      <span className="bg-amber-500 text-white text-[9px] px-1 rounded-full font-black animate-pulse">
+                        {syncQueueCount}
+                      </span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Status Indicator */}
+                {workMode === 'online' ? (
+                  isOnlineState ? (
+                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet">
+                      <Wifi size={10} className="text-emerald-400 animate-pulse" />
+                      Online
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="No internet connection. Waiting to reconnect.">
+                      <WifiOff size={10} className="text-rose-400" />
+                      Connection Lost
+                    </span>
+                  )
                 ) : (
-                  <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="No internet connection. Saving changes locally.">
-                    <WifiOff size={10} className="text-rose-400" />
-                    Offline Mode
+                  <span className="px-2 py-0.5 bg-slate-500/15 text-slate-300 border border-slate-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Working fully locally inside your browser">
+                    Local Device Mode
                   </span>
                 )}
 
-                {/* Sync Queue Badge */}
-                {syncQueueCount > 0 ? (
+                {/* Sync Queue status badge */}
+                {syncQueueCount > 0 && (
                   <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title={`${syncQueueCount} changes saved locally, waiting to sync`}>
                     <RefreshCw size={10} className={`text-amber-400 ${isSyncingState ? 'animate-spin' : ''}`} />
                     {syncQueueCount} Pending Sync
                   </span>
-                ) : (
-                  isOnlineState && (
-                    <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="All local changes synchronized with server">
-                      <RefreshCw size={10} className="text-sky-400" />
-                      Synced
-                    </span>
-                  )
                 )}
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-medium">Administrative Management Portal</p>
@@ -299,7 +341,7 @@ export default function App() {
               </span>
             </button>
             <button 
-              onClick={() => setIsCSVModalOpen(true)}
+              onClick={() => { setCsvModalTab('bulk'); setIsCSVModalOpen(true); }}
               aria-label="Open import and export center"
               className="flex items-center justify-center gap-2 px-3 py-2 sm:px-4 sm:py-2 bg-[var(--navy-light)] hover:bg-[var(--navy-lighter)] rounded-lg border border-white/10 text-xs sm:text-sm font-medium transition-all hover:scale-105 active:scale-95 flex-1 sm:flex-initial"
             >
@@ -469,6 +511,7 @@ export default function App() {
         {isCSVModalOpen && (
           <CSVModal 
             employees={employees}
+            initialTab={csvModalTab}
             onClose={() => setIsCSVModalOpen(false)} 
             onImport={async (imported) => {
               // Optimize: Parallel database writes

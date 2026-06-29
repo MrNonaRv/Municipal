@@ -1,198 +1,208 @@
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+/**
+ * Client-side service for Google Drive operations.
+ * Communicates exclusively with our server-side proxy API.
+ */
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+export interface GoogleDriveStatus {
+  connected: boolean;
+  type?: 'service_account';
+  email?: string;
+  folderId?: string;
+}
 
-const provider = new GoogleAuthProvider();
-provider.addScope('https://www.googleapis.com/auth/drive.file');
+// Memory cache for connection status
+let driveStatusCache: GoogleDriveStatus | null = null;
+let statusListeners: Array<(status: GoogleDriveStatus) => void> = [];
 
-let isSigningIn = false;
-let cachedAccessToken: string | null = null;
+export const addStatusListener = (callback: (status: GoogleDriveStatus) => void) => {
+  statusListeners.push(callback);
+  if (driveStatusCache) {
+    callback(driveStatusCache);
+  }
+};
 
-export const initAuth = (
-  onAuthSuccess?: (user: User, token: string) => void,
-  onAuthFailure?: () => void
-) => {
-  return onAuthStateChanged(auth, async (user: User | null) => {
-    if (user) {
-      if (cachedAccessToken) {
-        if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else {
-        // If we have a user but no cached token, we can try to re-auth or trigger sign-in.
-        // Usually we only have token from credentialFromResult after popup.
-        if (onAuthFailure) onAuthFailure();
-      }
-    } else {
-      cachedAccessToken = null;
-      if (onAuthFailure) onAuthFailure();
+export const removeStatusListener = (callback: (status: GoogleDriveStatus) => void) => {
+  statusListeners = statusListeners.filter(cb => cb !== callback);
+};
+
+const notifyListeners = (status: GoogleDriveStatus) => {
+  driveStatusCache = status;
+  statusListeners.forEach(cb => {
+    try {
+      cb(status);
+    } catch (err) {
+      console.error(err);
     }
   });
 };
 
-export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+/**
+ * Checks the Google Drive connection status on the server.
+ */
+export const checkDriveStatus = async (): Promise<GoogleDriveStatus> => {
   try {
-    isSigningIn = true;
-    const result = await signInWithPopup(auth, provider);
-    const credential = GoogleAuthProvider.credentialFromResult(result);
-    if (!credential?.accessToken) {
-      throw new Error('Failed to get access token from Firebase Auth');
+    const res = await fetch('/api/drive/config');
+    if (res.ok) {
+      const data: GoogleDriveStatus = await res.json();
+      notifyListeners(data);
+      return data;
     }
-
-    cachedAccessToken = credential.accessToken;
-    return { user: result.user, accessToken: cachedAccessToken };
-  } catch (error: any) {
-    console.error('Sign in error:', error);
-    throw error;
-  } finally {
-    isSigningIn = false;
+  } catch (err) {
+    console.error('Failed to fetch Drive status:', err);
   }
-};
-
-export const getAccessToken = async (): Promise<string | null> => {
-  return cachedAccessToken;
-};
-
-export const logout = async () => {
-  await auth.signOut();
-  cachedAccessToken = null;
+  const fallback = { connected: false };
+  notifyListeners(fallback);
+  return fallback;
 };
 
 /**
- * Uploads a file (Blob or File) to Google Drive in two phases:
- * 1. Create file metadata (returns a fileId)
- * 2. Upload actual file content via PATCH
- * Then fetches full details including webViewLink and webContentLink.
+ * Initializes the auth state listener for compatibility with existing codebase.
+ */
+export const initAuth = (
+  onAuthSuccess?: (user: any, token: string) => void,
+  onAuthFailure?: () => void
+) => {
+  // Check status immediately
+  checkDriveStatus().then(status => {
+    if (status.connected) {
+      if (onAuthSuccess) {
+        onAuthSuccess({ email: status.email || 'linked-account@gdrive' }, 'server_proxy_token');
+      }
+    } else {
+      if (onAuthFailure) onAuthFailure();
+    }
+  });
+
+  // Return unsubscribe dummy
+  return () => {};
+};
+
+/**
+ * Dummy sign-in function for compatibility.
+ * Configured system connection should be handled in the settings modal.
+ */
+export const googleSignIn = async (): Promise<any> => {
+  throw new Error('Please configure System Google Drive via the Data Center instead of a personal login popup.');
+};
+
+/**
+ * Gets the current access token status (returns dummy token if connected to trigger connected UI state).
+ */
+export const getAccessToken = async (): Promise<string | null> => {
+  if (driveStatusCache) {
+    return driveStatusCache.connected ? 'server_proxy_token' : null;
+  }
+  const status = await checkDriveStatus();
+  return status.connected ? 'server_proxy_token' : null;
+};
+
+/**
+ * Unlinks the Google Drive service-wide connection.
+ */
+export const logout = async () => {
+  try {
+    const res = await fetch('/api/drive/disconnect', { method: 'POST' });
+    if (res.ok) {
+      notifyListeners({ connected: false });
+    } else {
+      throw new Error('Failed to disconnect');
+    }
+  } catch (err) {
+    console.error('Disconnect error:', err);
+    throw err;
+  }
+};
+
+/**
+ * Saves a Google Service Account key configuration to the server database.
+ */
+export const saveServiceAccountConfig = async (
+  serviceAccountKey: string,
+  folderId?: string
+): Promise<GoogleDriveStatus> => {
+  const res = await fetch('/api/drive/config', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      serviceAccountKey,
+      folderId,
+    }),
+  });
+
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to save configuration');
+  }
+
+  const data: GoogleDriveStatus = await res.json();
+  notifyListeners(data);
+  return data;
+};
+
+/**
+ * Uploads a file to Google Drive using the server-side Service Account.
  */
 export const uploadFileToDrive = async (
   fileBlob: Blob,
   fileName: string,
   mimeType: string
 ): Promise<{ id: string; name: string; webViewLink?: string; webContentLink?: string }> => {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Not authenticated with Google Drive. Please log in first.');
+  // Convert Blob to base64
+  const reader = new FileReader();
+  const base64Promise = new Promise<string>((resolve, reject) => {
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64Data = result.split(',')[1] || result;
+      resolve(base64Data);
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(fileBlob);
+  });
+  
+  const base64Data = await base64Promise;
 
-  // Step 1: Create file metadata
-  const metadataResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
+  const res = await fetch('/api/drive/upload', {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      name: fileName,
-      mimeType: mimeType,
+      fileName,
+      mimeType,
+      fileData: base64Data,
     }),
   });
 
-  if (!metadataResponse.ok) {
-    const errText = await metadataResponse.text();
-    throw new Error(`Failed to create metadata: ${metadataResponse.statusText} - ${errText}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to upload scanned document to Google Drive');
   }
 
-  const fileData = await metadataResponse.json();
-  const fileId = fileData.id;
-
-  // Step 2: Upload media content via PATCH
-  const mediaResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': mimeType,
-    },
-    body: fileBlob,
-  });
-
-  if (!mediaResponse.ok) {
-    // Clean up created metadata on failure
-    await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    }).catch(() => {});
-
-    const errText = await mediaResponse.text();
-    throw new Error(`Failed to upload content: ${mediaResponse.statusText} - ${errText}`);
-  }
-
-  // Step 3: Fetch file details
-  const detailsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,webViewLink,webContentLink,mimeType`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (detailsResponse.ok) {
-    return await detailsResponse.json();
-  }
-
-  return { id: fileId, name: fileName };
+  return await res.json();
 };
 
 /**
- * Downloads a file from Google Drive and returns it as a Blob.
+ * Downloads a file from Google Drive as a Blob.
  */
 export const downloadFileFromDrive = async (fileId: string): Promise<Blob> => {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Not authenticated with Google Drive. Please log in first.');
-
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Failed to download file: ${response.statusText} - ${errText}`);
+  const res = await fetch(`/api/drive/download/${fileId}`);
+  if (!res.ok) {
+    throw new Error(`Failed to download file from Google Drive (${res.statusText})`);
   }
-
-  return await response.blob();
+  return await res.blob();
 };
 
 /**
- * Lists files matching an optional query
- */
-export const listFilesFromDrive = async (q?: string): Promise<any[]> => {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Not authenticated with Google Drive. Please log in first.');
-
-  let url = 'https://www.googleapis.com/drive/v3/files?fields=files(id,name,mimeType,webViewLink,webContentLink,createdTime)&orderBy=createdTime%20desc';
-  if (q) {
-    url += `&q=${encodeURIComponent(q)}`;
-  }
-
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Failed to list files: ${response.statusText} - ${errText}`);
-  }
-
-  const data = await response.json();
-  return data.files || [];
-};
-
-/**
- * Deletes a file from Google Drive
+ * Deletes a file from Google Drive.
  */
 export const deleteFileFromDrive = async (fileId: string): Promise<void> => {
-  const token = await getAccessToken();
-  if (!token) throw new Error('Not authenticated with Google Drive. Please log in first.');
-
-  const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+  const res = await fetch(`/api/drive/delete/${fileId}`, {
     method: 'DELETE',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
   });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Failed to delete file: ${response.statusText} - ${errText}`);
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error || 'Failed to delete file from Google Drive');
   }
 };
