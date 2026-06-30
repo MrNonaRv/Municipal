@@ -28,9 +28,9 @@ export const getServerReachable = (): boolean => {
   return lastServerReachable;
 };
 
-export const checkServerConnection = async (): Promise<boolean> => {
+export const checkServerConnection = async (retries = 2): Promise<boolean> => {
   const mode = getWorkMode();
-  console.log(`[checkServerConnection] Checking connection. WorkMode: ${mode}, navigator.onLine: ${navigator.onLine}`);
+  console.log(`[checkServerConnection] Checking connection. WorkMode: ${mode}, navigator.onLine: ${navigator.onLine}, retries left: ${retries}`);
   if (mode === 'local') {
     console.log('[checkServerConnection] WorkMode is "local", skipping connection check and marking server unreachable.');
     setServerReachable(false);
@@ -39,9 +39,9 @@ export const checkServerConnection = async (): Promise<boolean> => {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
-      console.warn('[checkServerConnection] Connection check timed out after 10000ms.');
+      console.warn('[checkServerConnection] Connection check timed out after 15000ms.');
       controller.abort(new Error('timeout'));
-    }, 10000);
+    }, 15000);
     
     console.log('[checkServerConnection] Fetching /api/health...');
     const response = await fetch('/api/health', { signal: controller.signal });
@@ -61,6 +61,10 @@ export const checkServerConnection = async (): Promise<boolean> => {
       return true;
     } else {
       console.warn(`[checkServerConnection] Server returned non-OK status: ${response.status}`);
+      if (retries > 0) {
+        console.log(`[checkServerConnection] Retrying... (${retries} retries left)`);
+        return checkServerConnection(retries - 1);
+      }
       setServerReachable(false);
       return false;
     }
@@ -69,6 +73,10 @@ export const checkServerConnection = async (): Promise<boolean> => {
       console.warn('[checkServerConnection] Connection check failed due to timeout.');
     } else {
       console.error('[checkServerConnection] Connection check failed with error:', e);
+    }
+    if (retries > 0) {
+      console.log(`[checkServerConnection] Retrying... (${retries} retries left)`);
+      return checkServerConnection(retries - 1);
     }
     setServerReachable(false);
     return false;
