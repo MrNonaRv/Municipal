@@ -78,13 +78,15 @@ export default function App() {
     const updateOnlineStatus = async () => {
       const online = navigator.onLine;
       const reachable = await checkServerConnection();
-      setIsOnlineState(online && reachable);
+      setIsOnlineState(online);
       
       const mode = getWorkMode();
       if (mode !== 'local') {
         if (online && reachable) {
           addToast('Network connection detected. Syncing local changes...', 'info');
           triggerSync();
+        } else if (online && !reachable) {
+          addToast('Network connection detected, but server is currently unreachable. Changes will be saved locally.', 'info');
         } else {
           addToast('Network connection lost. Saving changes locally.', 'info');
         }
@@ -127,7 +129,7 @@ export default function App() {
       setWorkModeState(newMode);
       if (newMode !== 'local') {
         checkServerConnection().then(reachable => {
-          setIsOnlineState(navigator.onLine && reachable);
+          setIsOnlineState(navigator.onLine);
           if (navigator.onLine && reachable) {
             triggerSync();
           } else {
@@ -142,7 +144,7 @@ export default function App() {
     };
 
     const handleReachabilityChange = (e: any) => {
-      setIsOnlineState(navigator.onLine && e.detail);
+      setIsOnlineState(navigator.onLine);
     };
 
     window.addEventListener('online', updateOnlineStatus);
@@ -160,7 +162,7 @@ export default function App() {
         const isCurrentlyOnline = navigator.onLine;
         const wasReachable = getServerReachable();
         const nowReachable = await checkServerConnection();
-        setIsOnlineState(isCurrentlyOnline && nowReachable);
+        setIsOnlineState(isCurrentlyOnline);
 
         if (mode === 'auto') {
           if (isCurrentlyOnline && nowReachable && !wasReachable) {
@@ -174,7 +176,7 @@ export default function App() {
     // Initial check
     setSyncQueueCount(getSyncQueue().length);
     checkServerConnection().then(reachable => {
-      setIsOnlineState(navigator.onLine && reachable);
+      setIsOnlineState(navigator.onLine);
       if (getWorkMode() !== 'local' && navigator.onLine && reachable && getSyncQueue().length > 0) {
         triggerSync();
       }
