@@ -6,15 +6,12 @@
    - Make sure you have Node.js installed on your computer.
    - Download it from: https://nodejs.org/ (Use the "LTS" version).
 
-2. AUTOMATIC INSTALLATION:
-   - Windows: Double-click "install-requirements.bat"
-   - Mac/Linux: Run "./install-requirements.sh" in your terminal.
+2. STARTING THE APP (WINDOWS):
+   - Simply double-click "GovRecords Desktop.vbs" or "launch.vbs".
+   - This will silently start the server in the background and open the app in your browser automatically!
 
-3. STARTING THE APP:
-   - Windows: Double-click "start-app.bat"
-   - Mac/Linux: Run "./start-app.sh" in your terminal.
+3. FEATURES:
+   - Local & Cloud Sync: Automatically keeps your database and local offline edits in sync.
+   - Offline Ready: Works perfectly without an internet connection.
+   - Silent Execution: No annoying terminal windows left open on your desktop.
 
-4. FEATURES:
-   - Local Storage: All data is saved on your computer.
-   - Autosave: Changes are saved automatically as you type.
-   - Offline Ready: Works without an internet connection once installed.
