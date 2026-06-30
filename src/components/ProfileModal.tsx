@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Employee } from '../types/employee';
+import { Employee, Attachment } from '../types/employee';
 import { Printer, Edit, Trash2, X, FileText, History, Users, ShieldCheck, MapPin, Phone, Mail, Calendar, Download, ArrowLeft, FileUp, Eye, ZoomIn, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { downloadFileFromSupabase as downloadFileFromDrive, getAccessToken } from '../services/supabaseStorage';
+import { PreviewModal } from './PreviewModal';
 
 interface Props {
   employee: Employee;
@@ -20,7 +21,10 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
   const [fitToWidth, setFitToWidth] = useState<boolean>(true);
   const [isModalFullScreen, setIsModalFullScreen] = useState<boolean>(true);
 
-  // Supabase download state in ProfileModal
+  // Preview state
+  const [previewDoc, setPreviewDoc] = useState<Attachment | null>(null);
+
+  // Google Drive download state in ProfileModal
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
 
@@ -786,6 +790,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
                   exit={{ opacity: 0, y: -10 }}
                   className="docs-container font-sans text-slate-900 relative z-10 w-full max-w-7xl mx-auto bg-white border border-slate-200 shadow-2xl rounded-3xl p-6 md:p-10 print:shadow-none print:border-none"
                 >
+                  {previewDoc && <PreviewModal doc={previewDoc} onClose={() => setPreviewDoc(null)} />}
                   <div className="text-center mb-8 relative">
                     <h2 className="font-playfair font-black text-3xl mt-2 mb-2 text-[var(--navy)] tracking-tight">SCANNED DOCUMENTS GALLERY</h2>
                     <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Official Personnel Scans & Dossier Attachments</p>
@@ -879,6 +884,13 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
                           <div className="w-full h-48 bg-slate-100 rounded-xl mb-4 border border-slate-200 flex items-center justify-center overflow-hidden relative group">
                             {doc.driveFileId ? (
                               <div className="flex flex-col items-center justify-center text-center p-4">
+                                <button
+                                  onClick={() => setPreviewDoc(doc)}
+                                  className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110 mb-2"
+                                  title="Preview document"
+                                >
+                                  <Eye size={20} />
+                                </button>
                                 <Cloud size={48} className="text-indigo-600 mb-2 animate-pulse" />
                                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Stored on Supabase</span>
                                 {doc.driveWebViewLink && (
@@ -895,17 +907,25 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
                             ) : doc.fileType.startsWith('image/') ? (
                               <>
                                 <img src={doc.fileData} alt={doc.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" referrerPolicy="no-referrer" />
-                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => setPreviewDoc(doc)}
+                                  className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110"
+                                  title="Preview document"
+                                >
+                                  <Eye size={20} />
+                                </button>
+                                {!doc.driveFileId && (
                                   <a
                                     href={doc.fileData}
-                                    target="_blank"
-                                    rel="noreferrer"
+                                    download={doc.fileName}
                                     className="p-3 bg-white text-slate-800 rounded-full hover:bg-slate-100 shadow transition-transform hover:scale-110"
-                                    title="View full image"
+                                    title="Download file"
                                   >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-eye"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    <Download size={20} />
                                   </a>
-                                </div>
+                                )}
+                              </div>
                               </>
                             ) : (
                               <FileText size={48} className="text-indigo-400" />
