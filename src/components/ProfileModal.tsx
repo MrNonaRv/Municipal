@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Employee } from '../types/employee';
 import { Printer, Edit, Trash2, X, FileText, History, Users, ShieldCheck, MapPin, Phone, Mail, Calendar, Download, ArrowLeft, FileUp, Eye, ZoomIn, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { downloadFileFromDrive, getAccessToken } from '../services/googleDrive';
+import { downloadFileFromSupabase as downloadFileFromDrive, getAccessToken } from '../services/supabaseStorage';
 
 interface Props {
   employee: Employee;
@@ -20,7 +20,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
   const [fitToWidth, setFitToWidth] = useState<boolean>(true);
   const [isModalFullScreen, setIsModalFullScreen] = useState<boolean>(true);
 
-  // Google Drive download state in ProfileModal
+  // Supabase download state in ProfileModal
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [driveError, setDriveError] = useState<string | null>(null);
 
@@ -40,7 +40,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
       document.body.removeChild(a);
     } catch (err: any) {
       console.error("Failed to retrieve file", err);
-      setDriveError(`Failed to download from Google Drive: ${err.message || err}`);
+      setDriveError(`Failed to download from Supabase Storage: ${err.message || err}`);
     } finally {
       setDownloadingFileId(null);
     }
@@ -880,7 +880,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
                             {doc.driveFileId ? (
                               <div className="flex flex-col items-center justify-center text-center p-4">
                                 <Cloud size={48} className="text-indigo-600 mb-2 animate-pulse" />
-                                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Stored on Google Drive</span>
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700">Stored on Supabase</span>
                                 {doc.driveWebViewLink && (
                                   <a
                                     href={doc.driveWebViewLink}
@@ -888,7 +888,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
                                     rel="noopener noreferrer"
                                     className="mt-2 flex items-center gap-1 text-[9px] font-black uppercase tracking-widest text-indigo-500 hover:text-indigo-700 transition-colors"
                                   >
-                                    <ExternalLink size={10} /> View in GDrive
+                                    <ExternalLink size={10} /> View in Supabase
                                   </a>
                                 )}
                               </div>
@@ -916,7 +916,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
                             <h3 className="font-sans font-black text-slate-800 text-base uppercase tracking-tight truncate">{doc.name}</h3>
                             {doc.driveFileId && (
                               <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shrink-0">
-                                <Cloud size={8} /> GDrive
+                                <Cloud size={8} /> Supabase
                               </span>
                             )}
                           </div>

@@ -6,7 +6,7 @@ import {
   Key, Shield, HelpCircle, Check, Lock, Clock, Trash2, Plus, Edit, UploadCloud, 
   AlertTriangle, Calendar, Search, Filter
 } from 'lucide-react';
-import { checkDriveStatus, saveServiceAccountConfig, logout as unlinkDrive, GoogleDriveStatus } from '../services/googleDrive';
+import { checkSupabaseStatus, saveSupabaseConfig, logout as unlinkSupabase, SupabaseStatus } from '../services/supabaseStorage';
 import { getActivityLogs, clearActivityLogs, ActivityLog } from '../services/db';
 
 interface Props {
@@ -14,11 +14,11 @@ interface Props {
   onImport: (data: Employee[]) => Promise<void> | void;
   onClear?: () => Promise<void> | void;
   employees: Employee[];
-  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive' | 'logs';
+  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive' | 'supabase' | 'logs';
 }
 
 export default function CSVModal({ onClose, onImport, onClear, employees, initialTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'gdrive' | 'logs'>(initialTab || 'bulk');
+  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'supabase' | 'logs'>(initialTab === 'gdrive' ? 'supabase' : (initialTab || 'bulk'));
   const [previewData, setPreviewData] = useState<Employee[]>([]);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
   const [isImporting, setIsImporting] = useState(false);
@@ -26,10 +26,11 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Google Drive Config State
-  const [driveStatus, setDriveStatus] = useState<GoogleDriveStatus | null>(null);
-  const [saKey, setSaKey] = useState('');
-  const [driveFolderId, setDriveFolderId] = useState('');
+  // Supabase Config State
+  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus | null>(null);
+  const [supabaseUrl, setSupabaseUrl] = useState('');
+  const [supabaseKey, setSupabaseKey] = useState('');
+  const [supabaseBucket, setSupabaseBucket] = useState('records');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Activity Log State
@@ -38,11 +39,12 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
   const [logFilter, setLogFilter] = useState<'ALL' | 'ADD' | 'MODIFY' | 'DELETE' | 'IMPORT' | 'CLEAR'>('ALL');
 
   useEffect(() => {
-    if (activeTab === 'gdrive') {
-      checkDriveStatus().then(status => {
-        setDriveStatus(status);
-        if (status.connected && status.folderId) {
-          setDriveFolderId(status.folderId);
+    if (activeTab === 'supabase') {
+      checkSupabaseStatus().then(status => {
+        setSupabaseStatus(status);
+        if (status.connected) {
+          if (status.supabaseUrl) setSupabaseUrl(status.supabaseUrl);
+          if (status.supabaseBucket) setSupabaseBucket(status.supabaseBucket);
         }
       });
     } else if (activeTab === 'logs') {
@@ -330,13 +332,13 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
           </button>
           <button 
             role="tab" 
-            id="tab-gdrive"
-            aria-controls="panel-gdrive"
-            aria-selected={activeTab === 'gdrive'} 
-            onClick={() => setActiveTab('gdrive')} 
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'gdrive' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
+            id="tab-supabase"
+            aria-controls="panel-supabase"
+            aria-selected={activeTab === 'supabase'} 
+            onClick={() => setActiveTab('supabase')} 
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'supabase' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
           >
-            <Cloud size={16}/> Settings & Drive
+            <Cloud size={16}/> Settings & Supabase
           </button>
           <button 
             role="tab" 
@@ -476,21 +478,21 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
             </div>
           )}
 
-          {activeTab === 'gdrive' && (
+          {activeTab === 'supabase' && (
             <div className="space-y-6">
               <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                 <h3 className="font-bold text-[var(--navy)] flex items-center gap-2 mb-2 text-sm">
-                  <Cloud size={18} className="text-blue-500" />
-                  System-Wide Google Drive Storage
+                  <Cloud size={18} className="text-indigo-500" />
+                  System-Wide Supabase Storage
                 </h3>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Establish a single, hardcoded Google Drive connection. Once set up, all scanned employee documents
-                  will save directly to your organization's Google Drive. All users can instantly upload and access
-                  files without encountering domain authorization issues on Vercel.
+                  Establish a single, hardcoded Supabase connection. Once set up, all scanned employee documents
+                  will save directly to your organization's Supabase Storage bucket. All users can instantly upload and access
+                  files securely through our server-side proxy.
                 </p>
               </div>
 
-              {driveStatus?.connected ? (
+              {supabaseStatus?.connected ? (
                 <div className="space-y-4">
                   <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
                     <div className="p-2 bg-emerald-500 text-white rounded-full">
@@ -499,15 +501,13 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                     <div className="space-y-1 flex-1">
                       <div className="font-bold text-emerald-800 text-sm">System Storage Active</div>
                       <div className="text-xs text-emerald-700">
-                        <span className="font-medium">Service Account Email:</span>{' '}
-                        <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{driveStatus.email}</code>
+                        <span className="font-medium">Supabase URL:</span>{' '}
+                        <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{supabaseStatus.supabaseUrl}</code>
                       </div>
-                      {driveStatus.folderId && (
-                        <div className="text-xs text-emerald-700">
-                          <span className="font-medium">Target Folder ID:</span>{' '}
-                          <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{driveStatus.folderId}</code>
-                        </div>
-                      )}
+                      <div className="text-xs text-emerald-700">
+                        <span className="font-medium">Target Bucket Name:</span>{' '}
+                        <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{supabaseStatus.supabaseBucket || 'records'}</code>
+                      </div>
                     </div>
                   </div>
 
@@ -516,18 +516,18 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                       <Shield size={14} /> Security and Authorization
                     </div>
                     <p>
-                      Files are securely transmitted server-to-server using encrypted credentials in your database.
-                      Remember to share your Google Drive Folder with the service account email above so it can read and write files.
+                      Files are securely uploaded server-to-server using encrypted credentials in your database.
+                      Remember to create the storage bucket inside your Supabase project before uploading any files.
                     </p>
                   </div>
 
                   <button
                     onClick={async () => {
-                      if (confirm('Are you sure you want to unlink the system Google Drive storage? Scanned files will no longer back up to Drive.')) {
+                      if (confirm('Are you sure you want to unlink the system Supabase storage? Scanned files will no longer back up to Supabase.')) {
                         try {
-                          await unlinkDrive();
-                          const status = await checkDriveStatus();
-                          setDriveStatus(status);
+                          await unlinkSupabase();
+                          const status = await checkSupabaseStatus();
+                          setSupabaseStatus(status);
                           setError(null);
                         } catch (err: any) {
                           setError(err.message || 'Failed to unlink');
@@ -536,7 +536,7 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                     }}
                     className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-sm"
                   >
-                    Disconnect GDrive Storage
+                    Disconnect Supabase Storage
                   </button>
                 </div>
               ) : (
@@ -546,51 +546,64 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                   <div className="space-y-3">
                     <div className="space-y-1 font-sans">
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Service Account JSON Key
+                        Supabase Project URL
                       </label>
-                      <textarea
-                        value={saKey}
-                        onChange={(e) => setSaKey(e.target.value)}
-                        placeholder='{"type": "service_account", "project_id": "...", ...}'
-                        rows={6}
-                        className="w-full border p-2.5 rounded font-mono text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none"
+                      <input
+                        type="text"
+                        value={supabaseUrl}
+                        onChange={(e) => setSupabaseUrl(e.target.value)}
+                        placeholder="https://your-project-id.supabase.co"
+                        className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
                       />
                     </div>
 
                     <div className="space-y-1 font-sans">
                       <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Google Drive Folder ID (Optional)
+                        Supabase API Key / Service Role Key
+                      </label>
+                      <input
+                        type="password"
+                        value={supabaseKey}
+                        onChange={(e) => setSupabaseKey(e.target.value)}
+                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                        className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-1 font-sans">
+                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
+                        Supabase Storage Bucket Name (Optional)
                       </label>
                       <input
                         type="text"
-                        value={driveFolderId}
-                        onChange={(e) => setDriveFolderId(e.target.value)}
-                        placeholder="e.g. 1aBcDeFgHiJkLmNoPqRsTuVwXyZ"
+                        value={supabaseBucket}
+                        onChange={(e) => setSupabaseBucket(e.target.value)}
+                        placeholder="records"
                         className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
                       />
                       <p className="text-[10px] text-slate-500 font-sans">
-                        Leave blank to upload to the root of the Service Account's drive.
+                        Defaults to 'records'. Make sure this bucket is created in your Supabase storage.
                       </p>
                     </div>
                   </div>
 
                   <button
                     onClick={async () => {
-                      if (!saKey.trim()) {
-                        setError('Please paste your Google Service Account JSON key.');
+                      if (!supabaseUrl.trim() || !supabaseKey.trim()) {
+                        setError('Please provide both the Supabase Project URL and API key.');
                         return;
                       }
                       setIsSavingConfig(true);
                       setError(null);
                       try {
-                        await saveServiceAccountConfig(saKey, driveFolderId);
-                        const status = await checkDriveStatus();
-                        setDriveStatus(status);
-                        setSaKey('');
+                        await saveSupabaseConfig(supabaseUrl, supabaseKey, supabaseBucket || 'records');
+                        const status = await checkSupabaseStatus();
+                        setSupabaseStatus(status);
+                        setSupabaseKey('');
                         // Trigger a custom event so other components update immediately
                         window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { detail: status }));
                       } catch (err: any) {
-                        setError(err.message || 'Invalid service account or network error');
+                        setError(err.message || 'Invalid credentials or network error');
                       } finally {
                         setIsSavingConfig(false);
                       }
@@ -599,7 +612,7 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                     className="w-full py-2.5 bg-[var(--navy)] text-white font-bold rounded-lg hover:bg-opacity-90 disabled:opacity-50 transition-all flex justify-center items-center gap-2 text-sm"
                   >
                     {isSavingConfig ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Key size={16} />}
-                    {isSavingConfig ? 'Saving Configuration...' : 'Save GDrive Credentials'}
+                    {isSavingConfig ? 'Saving Configuration...' : 'Save Supabase Credentials'}
                   </button>
 
                   <div className="bg-slate-100 p-4 rounded-lg border text-xs text-slate-600 space-y-2 font-sans">
@@ -607,12 +620,11 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                       <HelpCircle size={14} /> Quick Setup Guide
                     </div>
                     <ol className="list-decimal pl-4 space-y-1 text-slate-500">
-                      <li>Go to the <a href="https://console.cloud.google.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Google Cloud Console</a>.</li>
-                      <li>Create a new Project, enable the <strong className="text-slate-700">Google Drive API</strong>.</li>
-                      <li>Go to <strong className="text-slate-700">IAM & Admin &gt; Service Accounts</strong>, create a Service Account.</li>
-                      <li>Select the account, click <strong className="text-slate-700">Keys &gt; Add Key &gt; Create New Key &gt; JSON</strong> and download it.</li>
-                      <li>Paste the entire JSON file contents into the field above.</li>
-                      <li><strong>Important:</strong> Create a folder on your personal Google Drive, and share it with the Service Account email (e.g. <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">service-account@...</code>) giving it <strong className="text-slate-700">Editor</strong> access!</li>
+                      <li>Go to the <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Supabase Dashboard</a>.</li>
+                      <li>Create or select your project.</li>
+                      <li>Go to <strong className="text-slate-700">Project Settings &gt; API</strong> and copy the <strong className="text-slate-700">Project URL</strong>.</li>
+                      <li>Copy the <strong className="text-slate-700">service_role</strong> API Key (or <strong className="text-slate-700">anon</strong> key if your bucket is public and has no restriction policy).</li>
+                      <li>Go to <strong className="text-slate-700">Storage</strong>, create a new bucket (e.g. named <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">records</code>) and ensure it's set up with appropriate access.</li>
                     </ol>
                   </div>
                 </div>

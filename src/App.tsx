@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Employee } from './types/employee';
 import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll, addActivityLog } from './services/db';
-import { DEMO_EMPLOYEES } from './services/demoData';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
 import ProfileModal from './components/ProfileModal';
@@ -13,7 +12,7 @@ import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { googleSignIn, logout, getAccessToken, initAuth } from './services/googleDrive';
+import { getAccessToken, initAuth } from './services/supabaseStorage';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -24,7 +23,7 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Google Drive storage states
+  // Supabase storage states
   const [isDriveConnected, setIsDriveConnected] = useState(false);
   const [driveUser, setDriveUser] = useState<any>(null);
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
@@ -40,7 +39,7 @@ export default function App() {
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const [editTab, setEditTab] = useState<'service' | 'attachments'>('service');
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
-  const [csvModalTab, setCsvModalTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>('bulk');
+  const [csvModalTab, setCsvModalTab] = useState<'bulk' | 'single' | 'export' | 'gdrive' | 'supabase'>('bulk');
   const [deletingEmp, setDeletingEmp] = useState<Employee | null>(null);
 
   const { toasts, addToast, removeToast } = useToast();
@@ -48,7 +47,7 @@ export default function App() {
   useEffect(() => {
     loadEmployees();
 
-    // Check initial drive connection
+    // Check initial Supabase connection
     getAccessToken().then(token => {
       setIsDriveConnected(!!token);
     });
@@ -64,7 +63,7 @@ export default function App() {
       }
     );
 
-    // Setup listener for custom system drive status change
+    // Setup listener for custom system storage status change
     const handleDriveStatusChanged = (e: any) => {
       setIsDriveConnected(e.detail.connected);
       if (e.detail.connected) {
@@ -196,20 +195,14 @@ export default function App() {
   }, []);
 
   const handleConnectDrive = () => {
-    setCsvModalTab('gdrive');
+    setCsvModalTab('gdrive'); // Will map to 'supabase' in the modal tab
     setIsCSVModalOpen(true);
   };
 
   const loadEmployees = async () => {
     setIsLoading(true);
     try {
-      let data = await dbGetAll();
-      if (data.length === 0 && !localStorage.getItem('gers_seeded_blocked')) {
-        // Seed demo data in parallel
-        await Promise.all(DEMO_EMPLOYEES.map(emp => dbPut(emp)));
-        data = await dbGetAll();
-        addToast('Demo data loaded', 'info');
-      }
+      const data = await dbGetAll();
       setEmployees(data);
     } catch (error) {
       console.error("Failed to load DB", error);
@@ -332,7 +325,7 @@ export default function App() {
             <button
               onClick={handleConnectDrive}
               disabled={isDriveConnecting}
-              aria-label="Link Google Drive Storage"
+              aria-label="Link Supabase Storage"
               className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium transition-all hover:scale-105 active:scale-95 flex-1 sm:flex-initial justify-center ${
                 isDriveConnected
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
@@ -347,7 +340,7 @@ export default function App() {
                 <CloudOff size={16} />
               )}
               <span className="inline">
-                {isDriveConnecting ? 'Connecting...' : isDriveConnected ? 'GDrive Storage' : 'Link Drive'}
+                {isDriveConnecting ? 'Connecting...' : isDriveConnected ? 'Supabase Storage' : 'Link Storage'}
               </span>
             </button>
             <button 

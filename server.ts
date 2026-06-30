@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
 import initialDatabase from './database.json';
 
 import { db } from './src/db/index.ts';
@@ -234,9 +235,86 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 
 let dbLoaded = false;
+
+async function seedRealEmployeesIfNeeded() {
+  try {
+    const dummyUser = await getDummyUser();
+    const existing = await db.select().from(employees).limit(1);
+    if (existing.length === 0) {
+      console.log('[Seed] Database is empty. Seeding real employees from database.json...');
+      const recordsToSeed: any[] = [];
+      
+      for (const [key, value] of Object.entries(initialDatabase)) {
+        if (value && typeof value === 'object' && 'surname' in value) {
+          const empVal = value as any;
+          recordsToSeed.push({
+            userId: dummyUser.id,
+            originalId: empVal.id || key,
+            photo: empVal.photo || null,
+            surname: empVal.surname || '',
+            firstName: empVal.firstName || '',
+            middleName: empVal.middleName || '',
+            nameExtension: empVal.nameExtension || '',
+            sex: empVal.sex || '',
+            civilStatus: empVal.civilStatus || '',
+            citizenship: empVal.citizenship || '',
+            height: empVal.height || '',
+            weight: empVal.weight || '',
+            bloodType: empVal.bloodType || '',
+            residentialAddress: empVal.residentialAddress || '',
+            permanentAddress: empVal.permanentAddress || '',
+            zipCode: empVal.zipCode || '',
+            telephone: empVal.telephone || '',
+            cellphone: empVal.cellphone || '',
+            email: empVal.email || '',
+            gsisNo: empVal.gsisNo || '',
+            pagibigNo: empVal.pagibigNo || '',
+            philhealthNo: empVal.philhealthNo || '',
+            sssNo: empVal.sssNo || '',
+            tin: empVal.tin || '',
+            agencyEmployeeNo: empVal.agencyEmployeeNo || '',
+            spouseSurname: empVal.spouseSurname || '',
+            spouseFirstName: empVal.spouseFirstName || '',
+            spouseMiddleName: empVal.spouseMiddleName || '',
+            spouseOccupation: empVal.spouseOccupation || '',
+            spouseEmployer: empVal.spouseEmployer || '',
+            spouseTelephone: empVal.spouseTelephone || '',
+            children: empVal.children || [],
+            fatherSurname: empVal.fatherSurname || '',
+            fatherFirstName: empVal.fatherFirstName || '',
+            fatherMiddleName: empVal.fatherMiddleName || '',
+            motherSurname: empVal.motherSurname || '',
+            motherFirstName: empVal.motherFirstName || '',
+            motherMiddleName: empVal.motherMiddleName || '',
+            education: empVal.education || [],
+            serviceRecords: empVal.serviceRecords || [],
+            attachments: empVal.attachments || [],
+            pdsScan: empVal.pdsScan || null
+          });
+        }
+      }
+      
+      if (recordsToSeed.length > 0) {
+        console.log(`[Seed] Found ${recordsToSeed.length} real employee records to seed.`);
+        for (const record of recordsToSeed) {
+          await db.insert(employees).values(record);
+        }
+        console.log(`[Seed] Successfully seeded ${recordsToSeed.length} real employee records.`);
+      } else {
+        console.log('[Seed] No matching employee records found in database.json.');
+      }
+    } else {
+      console.log(`[Seed] Database already contains employees. Skipping seeding.`);
+    }
+  } catch (error) {
+    console.error('[Seed] Failed to seed real employees:', error);
+  }
+}
+
 async function ensureDbLoaded() {
   if (!dbLoaded) {
     await loadDb();
+    await seedRealEmployeesIfNeeded();
     dbLoaded = true;
   }
 }
@@ -318,11 +396,20 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// Google Drive Server-Side Integration
-async function getGoogleAccessToken(): Promise<{ token: string; folderId?: string }> {
-  const configStr = dbCache['google_drive_config'];
+// Supabase Storage Server-Side Integration
+async function getSupabaseConfig(): Promise<{ supabaseUrl: string; supabaseKey: string; supabaseBucket: string }> {
+  // Check if env variables exist first (can override database config)
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      supabaseUrl: process.env.SUPABASE_URL,
+      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      supabaseBucket: process.env.SUPABASE_BUCKET || 'records',
+    };
+  }
+
+  const configStr = dbCache['supabase_config'];
   if (!configStr) {
-    throw new Error('Google Drive is not linked. Please configure a Service Account JSON in the Data Center first.');
+    throw new Error('Supabase Storage is not linked. Please configure it in the Settings/Data Center modal.');
   }
 
   let config: any;
@@ -332,68 +419,42 @@ async function getGoogleAccessToken(): Promise<{ token: string; folderId?: strin
     config = JSON.parse(configStr);
   }
 
-  if (config.type === 'service_account') {
-    if (!config.serviceAccountKey) {
-      throw new Error('Service Account key is missing.');
-    }
-    const sa = typeof config.serviceAccountKey === 'string' ? JSON.parse(config.serviceAccountKey) : config.serviceAccountKey;
-    const privateKey = sa.private_key.replace(/\\n/g, '\n');
-
-    const now = Math.floor(Date.now() / 1000);
-    const header = { alg: 'RS256', typ: 'JWT' };
-    const payload = {
-      iss: sa.client_email,
-      scope: 'https://www.googleapis.com/auth/drive',
-      aud: 'https://oauth2.googleapis.com/token',
-      exp: now + 3600,
-      iat: now
-    };
-
-    const base64UrlEncode = (obj: any) => {
-      return Buffer.from(JSON.stringify(obj))
-        .toString('base64')
-        .replace(/=/g, '')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_');
-    };
-
-    const sHeader = base64UrlEncode(header);
-    const sPayload = base64UrlEncode(payload);
-    const signatureInput = `${sHeader}.${sPayload}`;
-
-    const sign = crypto.createSign('RSA-SHA256');
-    sign.update(signatureInput);
-    const signature = sign.sign(privateKey, 'base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
-
-    const jwt = `${signatureInput}.${signature}`;
-
-    const res = await fetch('https://oauth2.googleapis.com/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
-        assertion: jwt
-      })
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Google token exchange failed: ${res.statusText} - ${errText}`);
-    }
-
-    const data: any = await res.json();
-    return { token: data.access_token, folderId: config.folderId };
+  if (!config.supabaseUrl || !config.supabaseKey) {
+    throw new Error('Invalid Supabase configuration.');
   }
 
-  throw new Error('Unsupported Google Drive configuration type.');
+  return {
+    supabaseUrl: config.supabaseUrl,
+    supabaseKey: config.supabaseKey,
+    supabaseBucket: config.supabaseBucket || 'records',
+  };
 }
 
-app.get('/api/drive/config', async (req, res) => {
+async function getSupabaseClient() {
+  const { supabaseUrl, supabaseKey, supabaseBucket } = await getSupabaseConfig();
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Supabase URL or Key is missing.');
+  }
+  const client = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+      persistSession: false,
+    },
+  });
+  return { client, bucket: supabaseBucket };
+}
+
+app.get('/api/supabase/config', async (req, res) => {
   try {
-    const configStr = dbCache['google_drive_config'];
+    // Check if env variables are set (acting as active auto-connection)
+    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return res.json({
+        connected: true,
+        supabaseUrl: process.env.SUPABASE_URL,
+        supabaseBucket: process.env.SUPABASE_BUCKET || 'records',
+      });
+    }
+
+    const configStr = dbCache['supabase_config'];
     if (!configStr) {
       return res.json({ connected: false });
     }
@@ -405,225 +466,157 @@ app.get('/api/drive/config', async (req, res) => {
       config = JSON.parse(configStr);
     }
 
-    if (config.type === 'service_account') {
-      let email = 'Service Account';
-      try {
-        const sa = typeof config.serviceAccountKey === 'string' ? JSON.parse(config.serviceAccountKey) : config.serviceAccountKey;
-        email = sa.client_email || email;
-      } catch (e) {}
-
-      return res.json({
-        connected: true,
-        type: 'service_account',
-        email: email,
-        folderId: config.folderId || ''
-      });
-    }
-
-    res.json({ connected: false });
+    return res.json({
+      connected: true,
+      supabaseUrl: config.supabaseUrl || '',
+      supabaseBucket: config.supabaseBucket || 'records',
+    });
   } catch (error) {
     console.error(error);
     res.json({ connected: false });
   }
 });
 
-app.post('/api/drive/config', async (req, res) => {
+app.post('/api/supabase/config', async (req, res) => {
   try {
-    const { serviceAccountKey, folderId } = req.body;
-    if (!serviceAccountKey) {
-      return res.status(400).json({ error: 'Missing serviceAccountKey' });
-    }
-
-    let parsedKey: any;
-    try {
-      parsedKey = typeof serviceAccountKey === 'string' ? JSON.parse(serviceAccountKey) : serviceAccountKey;
-    } catch (err) {
-      return res.status(400).json({ error: 'Invalid JSON format for Service Account Key' });
-    }
-
-    if (!parsedKey.client_email || !parsedKey.private_key) {
-      return res.status(400).json({ error: 'Service Account Key is missing client_email or private_key fields' });
+    const { supabaseUrl, supabaseKey, supabaseBucket } = req.body;
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(400).json({ error: 'Missing supabaseUrl or supabaseKey' });
     }
 
     const config = {
-      type: 'service_account',
-      serviceAccountKey: parsedKey,
-      folderId: folderId || '',
-      email: parsedKey.client_email
+      supabaseUrl,
+      supabaseKey,
+      supabaseBucket: supabaseBucket || 'records',
     };
 
     const encryptedData = encrypt(JSON.stringify(config));
-    dbCache['google_drive_config'] = encryptedData;
+    dbCache['supabase_config'] = encryptedData;
     await saveDb();
 
     if (firestoreDb) {
       try {
-        await setDoc(doc(firestoreDb, 'app_data', 'google_drive_config'), { value: encryptedData });
-        console.log('[Firebase] Synchronized Google Drive configuration to Firestore.');
+        await setDoc(doc(firestoreDb, 'app_data', 'supabase_config'), { value: encryptedData });
+        console.log('[Firebase] Synchronized Supabase configuration to Firestore.');
       } catch (fsErr) {
-        console.error('[Firebase] Failed to write Google Drive config to Firestore:', fsErr);
+        console.error('[Firebase] Failed to write Supabase config to Firestore:', fsErr);
       }
     }
 
     res.json({
       success: true,
       connected: true,
-      type: 'service_account',
-      email: parsedKey.client_email,
-      folderId: folderId || ''
+      supabaseUrl,
+      supabaseBucket: supabaseBucket || 'records',
     });
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: error.message || 'Failed to save Google Drive configuration' });
+    res.status(500).json({ error: error.message || 'Failed to save Supabase configuration' });
   }
 });
 
-app.post('/api/drive/disconnect', async (req, res) => {
+app.post('/api/supabase/disconnect', async (req, res) => {
   try {
-    if (dbCache['google_drive_config']) {
-      delete dbCache['google_drive_config'];
+    if (dbCache['supabase_config']) {
+      delete dbCache['supabase_config'];
       await saveDb();
     }
     if (firestoreDb) {
       try {
-        await deleteDoc(doc(firestoreDb, 'app_data', 'google_drive_config'));
-        console.log('[Firebase] Synchronized Google Drive disconnection to Firestore.');
+        await deleteDoc(doc(firestoreDb, 'app_data', 'supabase_config'));
+        console.log('[Firebase] Synchronized Supabase disconnection to Firestore.');
       } catch (fsErr) {
-        console.error('[Firebase] Failed to delete Google Drive config from Firestore:', fsErr);
+        console.error('[Firebase] Failed to delete Supabase config from Firestore:', fsErr);
       }
     }
     res.json({ success: true, connected: false });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to unlink Google Drive' });
+    res.status(500).json({ error: 'Failed to unlink Supabase Storage' });
   }
 });
 
-app.post('/api/drive/upload', async (req, res) => {
+app.post('/api/supabase/upload', async (req, res) => {
   try {
     const { fileName, mimeType, fileData } = req.body;
     if (!fileName || !mimeType || !fileData) {
       return res.status(400).json({ error: 'Missing fileName, mimeType, or fileData' });
     }
 
-    const { token, folderId } = await getGoogleAccessToken();
+    const { client, bucket } = await getSupabaseClient();
     const fileBuffer = Buffer.from(fileData, 'base64');
+    
+    // Ensure clean unique filename
+    const uniquePath = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
 
-    const metadataBody: any = {
+    const { data, error } = await client.storage
+      .from(bucket)
+      .upload(uniquePath, fileBuffer, {
+        contentType: mimeType,
+        upsert: true,
+      });
+
+    if (error) {
+      throw error;
+    }
+
+    const { data: publicUrlData } = client.storage.from(bucket).getPublicUrl(uniquePath);
+    const publicUrl = publicUrlData?.publicUrl || '';
+
+    // To prevent any client breakdown, we return fields expected by the client side:
+    // id, name, url, webViewLink, webContentLink. All map to the same file.
+    res.json({
+      id: uniquePath,
       name: fileName,
-      mimeType: mimeType,
-    };
-    if (folderId) {
-      metadataBody.parents = [folderId];
-    }
-
-    const metadataResponse = await fetch('https://www.googleapis.com/drive/v3/files', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(metadataBody),
+      url: publicUrl,
+      webViewLink: publicUrl,
+      webContentLink: publicUrl,
     });
-
-    if (!metadataResponse.ok) {
-      const errText = await metadataResponse.text();
-      throw new Error(`Failed to create Google Drive metadata: ${errText}`);
-    }
-
-    const driveFile: any = await metadataResponse.json();
-    const fileId = driveFile.id;
-
-    const mediaResponse = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
-      method: 'PATCH',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': mimeType,
-      },
-      body: fileBuffer,
-    });
-
-    if (!mediaResponse.ok) {
-      await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      }).catch(() => {});
-
-      const errText = await mediaResponse.text();
-      throw new Error(`Failed to upload media content to Google Drive: ${errText}`);
-    }
-
-    const detailsResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,webViewLink,webContentLink,mimeType`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (detailsResponse.ok) {
-      const details = await detailsResponse.json();
-      return res.json(details);
-    }
-
-    res.json({ id: fileId, name: fileName });
   } catch (error: any) {
-    console.error('Server Drive upload error:', error);
-    res.status(500).json({ error: error.message || 'Failed to upload file to Google Drive' });
+    console.error('Server Supabase upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload file to Supabase' });
   }
 });
 
-app.get('/api/drive/download/:fileId', async (req, res) => {
+app.get('/api/supabase/download/:fileId', async (req, res) => {
   try {
     const fileId = req.params.fileId;
-    const { token } = await getGoogleAccessToken();
+    const { client, bucket } = await getSupabaseClient();
 
-    const metaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=name,mimeType`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    let filename = 'document';
-    let mimeType = 'application/octet-stream';
-    if (metaRes.ok) {
-      const meta: any = await metaRes.json();
-      filename = meta.name || filename;
-      mimeType = meta.mimeType || mimeType;
+    const { data, error } = await client.storage.from(bucket).download(fileId);
+    if (error || !data) {
+      throw error || new Error('Failed to download file from Supabase storage.');
     }
 
-    const mediaRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const buffer = Buffer.from(await data.arrayBuffer());
+    
+    // Attempt to extract original filename from fileId (removes timestamp prefix)
+    const underscoreIndex = fileId.indexOf('_');
+    const filename = underscoreIndex !== -1 ? fileId.substring(underscoreIndex + 1) : fileId;
 
-    if (!mediaRes.ok) {
-      const errText = await mediaRes.text();
-      return res.status(mediaRes.status).send(`Failed to download file: ${errText}`);
-    }
-
-    const buffer = await mediaRes.arrayBuffer();
-    res.setHeader('Content-Type', mimeType);
+    res.setHeader('Content-Type', data.type || 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-    res.send(Buffer.from(buffer));
+    res.send(buffer);
   } catch (error: any) {
-    console.error('Server Drive download error:', error);
-    res.status(500).send(error.message || 'Failed to download file from Google Drive');
+    console.error('Server Supabase download error:', error);
+    res.status(500).send(error.message || 'Failed to download file from Supabase');
   }
 });
 
-app.delete('/api/drive/delete/:fileId', async (req, res) => {
+app.delete('/api/supabase/delete/:fileId', async (req, res) => {
   try {
     const fileId = req.params.fileId;
-    const { token } = await getGoogleAccessToken();
+    const { client, bucket } = await getSupabaseClient();
 
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-      method: 'DELETE',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return res.status(response.status).json({ error: `Failed to delete file: ${errText}` });
+    const { data, error } = await client.storage.from(bucket).remove([fileId]);
+    if (error) {
+      throw error;
     }
 
     res.json({ success: true });
   } catch (error: any) {
-    console.error('Server Drive delete error:', error);
-    res.status(500).json({ error: error.message || 'Failed to delete file from Google Drive' });
+    console.error('Server Supabase delete error:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete file from Supabase' });
   }
 });
 
