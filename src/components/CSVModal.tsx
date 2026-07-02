@@ -820,7 +820,12 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                       <p>{error}</p>
                       {error.includes('unauthorized-domain') && (
                         <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
-                          <strong>Note:</strong> You must add <code>{window.location.hostname}</code> to the <strong>Authorized domains</strong> list in your Firebase Console (Authentication &gt; Settings).
+                          <strong>Action Required:</strong> You must add <code>{window.location.hostname}</code> to the <strong>Authorized domains</strong> list in your <a href={`https://console.firebase.google.com/u/0/project/hr-main-datastorage-mam/authentication/settings`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a>.
+                        </div>
+                      )}
+                      {error.includes('not-found') || error.includes('NOT_FOUND') && (
+                        <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
+                          <strong>Action Required:</strong> Please ensure that <strong>Cloud Firestore</strong> is enabled in your <a href={`https://console.firebase.google.com/u/0/project/hr-main-datastorage-mam/firestore`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a>. Click "Create database" if it hasn't been created yet.
                         </div>
                       )}
                     </div>

@@ -111,13 +111,13 @@ async function initFirebase() {
         console.log('[Firebase] Initializing Firebase client SDK with Project ID:', config.projectId);
         firebaseApp = initializeApp(config);
         const dbId = config.firestoreDatabaseId || '(default)';
-        console.log('[Firebase] Initializing Firestore with Database ID:', dbId);
+        console.log('[Firebase] Initializing Firestore with Project:', config.projectId, 'Database:', dbId);
         firestoreDb = getFirestore(firebaseApp, dbId);
         return true;
       }
     }
-  } catch (err) {
-    console.warn('[Firebase] Failed to initialize Firebase:', err);
+  } catch (err: any) {
+    console.error('[Firebase] Failed to initialize Firebase. If you see NOT_FOUND, ensure Firestore is enabled in the Firebase Console:', err.message);
   }
   return false;
 }
