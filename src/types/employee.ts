@@ -38,6 +38,7 @@ export interface Attachment {
   driveFileId?: string;
   driveWebViewLink?: string;
   driveWebContentLink?: string;
+  storageProvider?: 'supabase' | 'gdrive';
 }
 
 export interface Employee {

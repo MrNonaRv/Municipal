@@ -6,6 +6,7 @@ import { convertImageToPDF } from '../utils/pdfHelpers';
 import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getAccessToken, uploadFileToSupabase as uploadFileToDrive, downloadFileFromSupabase as downloadFileFromDrive } from '../services/supabaseStorage';
+import { getDriveAccessToken, uploadFileToDrive as uploadFileToGDrive, downloadFileFromDrive as downloadFileFromGDrive } from '../services/driveStorage';
 import { isOnline } from '../services/db';
 
 const DOCUMENT_TYPES = [
@@ -39,10 +40,11 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const isInitialMount = useRef(true);
 
-  // States for Supabase Storage Integration in EditModal
+  // States for Storage Integration in EditModal
   const [isDriveConnected, setIsDriveConnected] = useState(false);
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   const [uploadDestination, setUploadDestination] = useState<'local' | 'drive'>('local');
+  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   // States for Scanned Documents Attachment
@@ -51,14 +53,29 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Check Supabase Storage connection status and online status to auto-detect destination
+  // Check Storage connection status and online status to auto-detect destination
   useEffect(() => {
     const updateDest = async () => {
-      const token = await getAccessToken();
-      const connected = !!token;
-      setIsDriveConnected(connected);
+      const supabaseToken = await getAccessToken();
+      const driveToken = await getDriveAccessToken();
+      
+      const isSupabaseConnected = !!supabaseToken;
+      const isGDriveConnected = !!driveToken;
+      
+      setIsDriveConnected(isSupabaseConnected || isGDriveConnected);
+      
       const online = isOnline() && navigator.onLine;
-      setUploadDestination(connected && online ? 'drive' : 'local');
+      
+      if (isGDriveConnected && online) {
+        setUploadDestination('drive');
+        setStorageProvider('gdrive');
+      } else if (isSupabaseConnected && online) {
+        setUploadDestination('drive');
+        setStorageProvider('supabase');
+      } else {
+        setUploadDestination('local');
+        setStorageProvider(null);
+      }
     };
     
     updateDest();
@@ -108,10 +125,22 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     if (!newDocName.trim() || !selectedFile) return;
 
     // Dynamically detect destination
-    const token = await getAccessToken();
-    const connected = !!token;
+    const supabaseToken = await getAccessToken();
+    const driveToken = await getDriveAccessToken();
+    const isSupabaseConnected = !!supabaseToken;
+    const isGDriveConnected = !!driveToken;
     const online = isOnline() && navigator.onLine;
-    const dest = connected && online ? 'drive' : 'local';
+    
+    let dest: 'local' | 'drive' = 'local';
+    let provider: 'supabase' | 'gdrive' | null = null;
+    
+    if (isGDriveConnected && online) {
+      dest = 'drive';
+      provider = 'gdrive';
+    } else if (isSupabaseConnected && online) {
+      dest = 'drive';
+      provider = 'supabase';
+    }
 
     const ext = selectedFile.name.split('.').pop() || 'png';
     const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
@@ -124,18 +153,24 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       setIsUploadingToDrive(true);
       setError(null);
       try {
-        const driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
+        let driveResult;
+        if (provider === 'gdrive') {
+          driveResult = await uploadFileToGDrive(selectedFile, autoFileName, selectedFile.type);
+        } else {
+          driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
+        }
 
         const newAttachment: Attachment = {
           id: 'drive-' + driveResult.id,
           name: newDocName.trim(),
           fileName: driveResult.name,
           fileType: selectedFile.type,
-          fileData: '', // On Supabase Storage
+          fileData: '', 
           uploadedAt: new Date().toISOString(),
           driveFileId: driveResult.id,
           driveWebViewLink: driveResult.webViewLink,
-          driveWebContentLink: driveResult.webContentLink
+          driveWebContentLink: driveResult.webContentLink,
+          storageProvider: provider as 'supabase' | 'gdrive'
         };
 
         setFormData(prev => ({
@@ -184,7 +219,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     setDownloadingFileId(doc.id);
     setError(null);
     try {
-      const blob = await downloadFileFromDrive(doc.driveFileId);
+      let blob;
+      if (doc.storageProvider === 'gdrive') {
+        blob = await downloadFileFromGDrive(doc.driveFileId);
+      } else {
+        blob = await downloadFileFromDrive(doc.driveFileId);
+      }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -274,10 +314,22 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       setIsUploadingToDrive(true);
       setError("Uploading selected document attachment...");
       try {
-        const token = await getAccessToken();
-        const connected = !!token;
+        const supabaseToken = await getAccessToken();
+        const driveToken = await getDriveAccessToken();
+        const isSupabaseConnected = !!supabaseToken;
+        const isGDriveConnected = !!driveToken;
         const online = isOnline() && navigator.onLine;
-        const dest = connected && online ? 'drive' : 'local';
+        
+        let dest: 'local' | 'drive' = 'local';
+        let provider: 'supabase' | 'gdrive' | null = null;
+        
+        if (isGDriveConnected && online) {
+          dest = 'drive';
+          provider = 'gdrive';
+        } else if (isSupabaseConnected && online) {
+          dest = 'drive';
+          provider = 'supabase';
+        }
 
         const ext = selectedFile.name.split('.').pop() || 'png';
         const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
@@ -288,7 +340,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         let newAttachment: Attachment;
 
         if (dest === 'drive') {
-          const driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
+          let driveResult;
+          if (provider === 'gdrive') {
+            driveResult = await uploadFileToGDrive(selectedFile, autoFileName, selectedFile.type);
+          } else {
+            driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
+          }
           newAttachment = {
             id: 'drive-' + driveResult.id,
             name: newDocName.trim(),
@@ -298,7 +355,8 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
             uploadedAt: new Date().toISOString(),
             driveFileId: driveResult.id,
             driveWebViewLink: driveResult.webViewLink,
-            driveWebContentLink: driveResult.webContentLink
+            driveWebContentLink: driveResult.webContentLink,
+            storageProvider: provider as 'supabase' | 'gdrive'
           };
         } else {
           if (!selectedFileData) {
@@ -638,11 +696,11 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                           <div className={`w-1.5 h-1.5 rounded-full ${isDriveConnected && uploadDestination === 'drive' ? 'bg-indigo-500 animate-pulse' : 'bg-amber-500'}`} />
                           {isDriveConnected && uploadDestination === 'drive' ? (
                             <span className="flex items-center gap-1">
-                              System auto-detected connection. Saving directly to <strong className="text-indigo-600 font-semibold">Supabase Storage</strong>.
+                              System auto-detected connection. Saving directly to <strong className="text-indigo-600 font-semibold">{storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}</strong>.
                             </span>
                           ) : (
                             <span className="flex items-center gap-1">
-                              System auto-detected offline/unlinked. Saving to <strong className="text-amber-600 font-semibold">Local Storage</strong> {!isDriveConnected ? "(Drive unlinked)" : "(Offline mode)"}.
+                              System auto-detected offline/unlinked. Saving to <strong className="text-amber-600 font-semibold">Local Storage</strong> {!isDriveConnected ? "(Storage unlinked)" : "(Offline mode)"}.
                             </span>
                           )}
                         </div>
@@ -666,10 +724,10 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       </div>
 
                       {!isDriveConnected && (
-                        <p className="mt-3 text-[9px] text-amber-500 italic">💡 Connect Supabase Storage in the dashboard to enable automated cloud storage with automatic file naming.</p>
+                        <p className="mt-3 text-[9px] text-amber-500 italic">💡 Connect Cloud Storage in the Data Center to enable automated cloud storage with automatic file naming.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'drive' && (
-                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your Supabase Storage.</p>
+                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your {storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'local' && (
                         <p className="mt-3 text-[9px] text-amber-500 italic">⚠️ Offline mode detected. File will be automatically saved locally and synchronized online later.</p>
@@ -720,7 +778,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                                 <p className="font-bold text-sm text-slate-800 truncate">{doc.name}</p>
                                 {doc.driveFileId && (
                                   <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 text-[8px] font-black uppercase tracking-widest rounded-full flex items-center gap-1 shrink-0">
-                                    <Cloud size={8} /> Supabase
+                                    <Cloud size={8} /> {doc.storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase'}
                                   </span>
                                 )}
                               </div>
@@ -736,7 +794,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                                 onClick={() => handleRetrieveAttachment(doc)}
                                 disabled={downloadingFileId === doc.id}
                                 className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center justify-center"
-                                title="Download / retrieve from Supabase Storage"
+                                title={`Download / retrieve from ${doc.storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}`}
                               >
                                 {downloadingFileId === doc.id ? (
                                   <Loader2 size={16} className="animate-spin text-indigo-600" />
@@ -761,7 +819,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-slate-50 rounded-lg transition-colors"
-                                title="View on Supabase Storage in new tab"
+                                title={`View on ${doc.storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'} in new tab`}
                               >
                                 <ExternalLink size={16} />
                               </a>

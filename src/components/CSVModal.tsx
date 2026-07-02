@@ -4,9 +4,10 @@ import { generateEmptyEmployee } from '../utils/helpers';
 import { 
   Download, Upload, FileJson, FileSpreadsheet, CheckSquare, Square, X, Cloud, 
   Key, Shield, HelpCircle, Check, Lock, Clock, Trash2, Plus, Edit, UploadCloud, 
-  AlertTriangle, Calendar, Search, Filter
+  AlertTriangle, Calendar, Search, Filter, LogOut
 } from 'lucide-react';
 import { checkSupabaseStatus, saveSupabaseConfig, logout as unlinkSupabase, SupabaseStatus } from '../services/supabaseStorage';
+import { initDriveAuth, googleSignIn, driveLogout, getDriveAccessToken } from '../services/driveStorage';
 import { getActivityLogs, clearActivityLogs, ActivityLog } from '../services/db';
 
 interface Props {
@@ -18,7 +19,7 @@ interface Props {
 }
 
 export default function CSVModal({ onClose, onImport, onClear, employees, initialTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'supabase' | 'logs'>(initialTab === 'gdrive' ? 'supabase' : (initialTab || 'bulk'));
+  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'supabase' | 'logs' | 'gdrive'>(initialTab || 'bulk');
   const [previewData, setPreviewData] = useState<Employee[]>([]);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
   const [isImporting, setIsImporting] = useState(false);
@@ -32,6 +33,11 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
   const [supabaseKey, setSupabaseKey] = useState('');
   const [supabaseBucket, setSupabaseBucket] = useState('records');
   const [isSavingConfig, setIsSavingConfig] = useState(false);
+
+  // Google Drive State
+  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  const [driveUser, setDriveUser] = useState<any>(null);
+  const [isLoggingInDrive, setIsLoggingInDrive] = useState(false);
 
   // Activity Log State
   const [logs, setLogs] = useState<ActivityLog[]>([]);
@@ -47,10 +53,53 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
           if (status.supabaseBucket) setSupabaseBucket(status.supabaseBucket);
         }
       });
+    } else if (activeTab === 'gdrive') {
+      initDriveAuth(
+        (user) => {
+          setDriveUser(user);
+          setIsDriveConnected(true);
+        },
+        () => {
+          setDriveUser(null);
+          setIsDriveConnected(false);
+        }
+      );
     } else if (activeTab === 'logs') {
       setLogs(getActivityLogs());
     }
   }, [activeTab]);
+
+  const handleDriveLogin = async () => {
+    setIsLoggingInDrive(true);
+    setError(null);
+    try {
+      const result = await googleSignIn();
+      if (result) {
+        setDriveUser(result.user);
+        setIsDriveConnected(true);
+        window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { 
+          detail: { connected: true, provider: 'gdrive', user: result.user } 
+        }));
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign in with Google');
+    } finally {
+      setIsLoggingInDrive(false);
+    }
+  };
+
+  const handleDriveLogout = async () => {
+    try {
+      await driveLogout();
+      setIsDriveConnected(false);
+      setDriveUser(null);
+      window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { 
+        detail: { connected: false, provider: 'gdrive' } 
+      }));
+    } catch (err: any) {
+      setError(err.message || 'Failed to logout');
+    }
+  };
 
   useEffect(() => {
     const handleLogsChange = () => {
@@ -338,7 +387,17 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
             onClick={() => setActiveTab('supabase')} 
             className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'supabase' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
           >
-            <Cloud size={16}/> Settings & Supabase
+            <Cloud size={16}/> Supabase
+          </button>
+          <button 
+            role="tab" 
+            id="tab-gdrive"
+            aria-controls="panel-gdrive"
+            aria-selected={activeTab === 'gdrive'} 
+            onClick={() => setActiveTab('gdrive')} 
+            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'gdrive' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
+          >
+            <UploadCloud size={16}/> Google Drive
           </button>
           <button 
             role="tab" 
@@ -665,6 +724,101 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                   </button>
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'gdrive' && (
+            <div className="space-y-6">
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <h3 className="font-bold text-blue-900 flex items-center gap-2 mb-2 text-sm">
+                  <UploadCloud size={18} className="text-blue-500" />
+                  Google Drive Storage Integration
+                </h3>
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  Connect your Google Drive account to use it as the primary storage for employee photos and scanned documents. 
+                  Files will be saved in a dedicated folder and accessible across all your devices.
+                </p>
+              </div>
+
+              {isDriveConnected ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
+                    {driveUser?.photoURL ? (
+                      <img src={driveUser.photoURL} alt="" className="w-10 h-10 rounded-full border border-emerald-200" referrerPolicy="no-referrer" />
+                    ) : (
+                      <div className="p-2 bg-emerald-500 text-white rounded-full">
+                        <Check size={16} />
+                      </div>
+                    )}
+                    <div className="space-y-1 flex-1">
+                      <div className="font-bold text-emerald-800 text-sm">Connected as {driveUser?.displayName || 'Google User'}</div>
+                      <div className="text-xs text-emerald-700 font-mono">{driveUser?.email}</div>
+                      <div className="mt-2 inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                        Drive API Active
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 text-xs text-amber-800 space-y-2">
+                    <div className="font-bold flex items-center gap-1.5 text-amber-900 uppercase tracking-wider">
+                      <Shield size={14} /> Permissions Info
+                    </div>
+                    <p>
+                      The application has permission to see, create, and delete its own files (drive.file scope). 
+                      It cannot access other files in your Google Drive unless they were created by this app.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleDriveLogout}
+                    className="w-full py-2.5 bg-white border border-rose-200 text-rose-600 hover:bg-rose-50 font-bold rounded-lg transition-colors text-sm flex items-center justify-center gap-2"
+                  >
+                    <LogOut size={16} />
+                    Disconnect Google Drive
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-6 flex flex-col items-center py-8">
+                  <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-2 shadow-inner">
+                    <UploadCloud size={32} />
+                  </div>
+                  <div className="text-center space-y-2 max-w-sm">
+                    <h3 className="font-bold text-[var(--navy)]">Not Connected</h3>
+                    <p className="text-xs text-slate-500">
+                      Sign in with your Google account to enable secure document storage on Google Drive.
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleDriveLogin}
+                    disabled={isLoggingInDrive}
+                    className="gsi-material-button w-full max-w-xs"
+                    style={{ width: '100%', maxWidth: '300px' }}
+                  >
+                    <div className="gsi-material-button-state"></div>
+                    <div className="gsi-material-button-content-wrapper">
+                      <div className="gsi-material-button-icon">
+                        <svg version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" style={{ display: 'block' }}>
+                          <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                          <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                          <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                          <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                          <path fill="none" d="M0 0h48v48H0z"></path>
+                        </svg>
+                      </div>
+                      <span className="gsi-material-button-contents">
+                        {isLoggingInDrive ? 'Signing in...' : 'Sign in with Google'}
+                      </span>
+                    </div>
+                  </button>
+
+                  <div className="bg-slate-50 p-4 rounded-lg border text-[10px] text-slate-500 space-y-2 max-w-sm text-center">
+                    <p>
+                      By connecting, you allow this application to read, create, and delete only the files it creates in your Google Drive.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

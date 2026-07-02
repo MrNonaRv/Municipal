@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { createClient } from '@supabase/supabase-js';
+import { google } from 'googleapis';
 import initialDatabase from './database.json';
 
 import { db } from './src/db/index.ts';
@@ -617,6 +618,111 @@ app.delete('/api/supabase/delete/:fileId', async (req, res) => {
   } catch (error: any) {
     console.error('Server Supabase delete error:', error);
     res.status(500).json({ error: error.message || 'Failed to delete file from Supabase' });
+  }
+});
+
+// Google Drive Integration Endpoints
+app.post('/api/drive/upload', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.split(' ')[1];
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Missing access token' });
+    }
+
+    const { fileName, mimeType, fileData } = req.body;
+    if (!fileName || !mimeType || !fileData) {
+      return res.status(400).json({ error: 'Missing fileName, mimeType, or fileData' });
+    }
+
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    // Extract base64 data
+    const base64Data = fileData.split(';base64,').pop();
+    const buffer = Buffer.from(base64Data, 'base64');
+    const bufferStream = new (require('stream').PassThrough)();
+    bufferStream.end(buffer);
+
+    const fileMetadata = {
+      name: fileName,
+      // You can specify a folder ID here if you want to group uploads
+    };
+    const media = {
+      mimeType: mimeType,
+      body: bufferStream,
+    };
+
+    const response = await drive.files.create({
+      requestBody: fileMetadata,
+      media: media,
+      fields: 'id, webViewLink, webContentLink',
+    });
+
+    res.json({
+      success: true,
+      fileId: response.data.id,
+      webViewLink: response.data.webViewLink,
+      webContentLink: response.data.webContentLink,
+    });
+  } catch (error: any) {
+    console.error('Drive upload error:', error);
+    res.status(500).json({ error: error.message || 'Failed to upload to Google Drive' });
+  }
+});
+
+app.get('/api/drive/download/:fileId', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.split(' ')[1];
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Missing access token' });
+    }
+
+    const fileId = req.params.fileId;
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    const response = await drive.files.get(
+      { fileId, alt: 'media' },
+      { responseType: 'arraybuffer' }
+    );
+
+    const metadata = await drive.files.get({
+      fileId,
+      fields: 'name, mimeType',
+    });
+
+    const buffer = Buffer.from(response.data as ArrayBuffer);
+    res.setHeader('Content-Type', metadata.data.mimeType || 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(metadata.data.name || 'file')}"`);
+    res.send(buffer);
+  } catch (error: any) {
+    console.error('Drive download error:', error);
+    res.status(500).json({ error: error.message || 'Failed to download from Google Drive' });
+  }
+});
+
+app.delete('/api/drive/delete/:fileId', async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+    const accessToken = authHeader?.split(' ')[1];
+    if (!accessToken) {
+      return res.status(401).json({ error: 'Missing access token' });
+    }
+
+    const fileId = req.params.fileId;
+    const oauth2Client = new google.auth.OAuth2();
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    await drive.files.delete({ fileId });
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Drive delete error:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete from Google Drive' });
   }
 });
 
