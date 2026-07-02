@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getAccessToken, uploadFileToSupabase as uploadFileToDrive, downloadFileFromSupabase as downloadFileFromDrive } from '../services/supabaseStorage';
 import { getDriveAccessToken, uploadFileToDrive as uploadFileToGDrive, downloadFileFromDrive as downloadFileFromGDrive } from '../services/driveStorage';
 import { isOnline } from '../services/db';
+import { syncAttachment } from '../services/attachmentSyncService';
 
 const DOCUMENT_TYPES = [
   { value: 'Birth_Certificate', label: 'Birth Certificate' },
@@ -48,9 +49,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   // States for Scanned Documents Attachment
-  const [newDocName, setNewDocName] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
+  const [syncQueue, setSyncQueue] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check Storage connection status and online status to auto-detect destination
@@ -89,13 +88,68 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     };
   }, [activeTab]);
 
+  // Background Attachment Sync Service
+  useEffect(() => {
+    const processSyncQueue = async () => {
+      const pendingSync = formData.attachments?.filter(a => 
+        a.fileData && 
+        !a.driveFileId && 
+        !syncQueue.includes(a.id) &&
+        isDriveConnected &&
+        uploadDestination === 'drive' &&
+        storageProvider
+      );
+
+      if (!pendingSync || pendingSync.length === 0) return;
+
+      // Add to internal tracking queue to prevent duplicate attempts
+      const itemToSync = pendingSync[0];
+      setSyncQueue(prev => [...prev, itemToSync.id]);
+
+      try {
+        console.log(`[BackgroundSync] Starting sync for attachment: ${itemToSync.name}`);
+        
+        // Convert base64 back to blob for upload
+        const response = await fetch(itemToSync.fileData);
+        const blob = await response.blob();
+        
+        const result = await syncAttachment(blob, itemToSync.fileName, storageProvider!);
+
+        if (result.success && result.driveFileId) {
+          console.log(`[BackgroundSync] Successfully synced ${itemToSync.name} to ${storageProvider}`);
+          setFormData(prev => ({
+            ...prev,
+            attachments: (prev.attachments || []).map(a => 
+              a.id === itemToSync.id 
+                ? { 
+                    ...a, 
+                    driveFileId: result.driveFileId, 
+                    driveWebViewLink: result.webViewLink,
+                    driveWebContentLink: result.webContentLink,
+                    storageProvider: storageProvider!,
+                    fileData: '' // Clear local data once synced
+                  } 
+                : a
+            )
+          }));
+        } else {
+          console.warn(`[BackgroundSync] Sync failed for ${itemToSync.name}:`, result.error);
+        }
+      } catch (err) {
+        console.error(`[BackgroundSync] Critical error syncing ${itemToSync.name}:`, err);
+      } finally {
+        setSyncQueue(prev => prev.filter(id => id !== itemToSync.id));
+      }
+    };
+
+    const timer = setTimeout(processSyncQueue, 3000);
+    return () => clearTimeout(timer);
+  }, [formData.attachments, isDriveConnected, uploadDestination, storageProvider, syncQueue]);
+
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       let file = e.target.files[0];
-      if (uploadDestination === 'local' && file.size > 2 * 1024 * 1024 && !file.type.startsWith('image/')) {
-        setError("File must be smaller than 2MB for local storage. Please connect Supabase Storage for larger files.");
-        return;
-      }
+      
       try {
         setError(null);
         if (file.type.startsWith('image/')) {
@@ -105,72 +159,25 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
             console.warn("Failed to convert image to PDF, using original image file directly", pdfErr);
           }
         }
+        
         const base64 = await fileToBase64(file);
-        setSelectedFile(file);
-        setSelectedFileData(base64);
-
-        // Auto-populate document name if empty
-        if (!newDocName.trim()) {
-          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-          setNewDocName(baseName);
-        }
-      } catch (err: any) {
-        console.error("File loading failed", err);
-        setError("File loading failed: " + (err instanceof Error ? err.message : String(err)));
-      }
-    }
-  };
-
-  const handleAddAttachment = async () => {
-    if (!newDocName.trim() || !selectedFile) return;
-
-    // Dynamically detect destination
-    const supabaseToken = await getAccessToken();
-    const driveToken = await getDriveAccessToken();
-    const isSupabaseConnected = !!supabaseToken;
-    const isGDriveConnected = !!driveToken;
-    const online = isOnline() && navigator.onLine;
-    
-    let dest: 'local' | 'drive' = 'local';
-    let provider: 'supabase' | 'gdrive' | null = null;
-    
-    if (isGDriveConnected && online) {
-      dest = 'drive';
-      provider = 'gdrive';
-    } else if (isSupabaseConnected && online) {
-      dest = 'drive';
-      provider = 'supabase';
-    }
-
-    const ext = selectedFile.name.split('.').pop() || 'png';
-    const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-    const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-    const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-    // Standardized Auto-named format
-    const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
-
-    if (dest === 'drive') {
-      setIsUploadingToDrive(true);
-      setError(null);
-      try {
-        let driveResult;
-        if (provider === 'gdrive') {
-          driveResult = await uploadFileToGDrive(selectedFile, autoFileName, selectedFile.type);
-        } else {
-          driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
-        }
+        
+        // Auto-determine name
+        const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+        
+        const ext = file.name.split('.').pop() || 'png';
+        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedDoc = baseName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
 
         const newAttachment: Attachment = {
-          id: 'drive-' + driveResult.id,
-          name: newDocName.trim(),
-          fileName: driveResult.name,
-          fileType: selectedFile.type,
-          fileData: '', 
-          uploadedAt: new Date().toISOString(),
-          driveFileId: driveResult.id,
-          driveWebViewLink: driveResult.webViewLink,
-          driveWebContentLink: driveResult.webContentLink,
-          storageProvider: provider as 'supabase' | 'gdrive'
+          id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+          name: baseName.trim(),
+          fileName: autoFileName,
+          fileType: file.type,
+          fileData: base64,
+          uploadedAt: new Date().toISOString()
         };
 
         setFormData(prev => ({
@@ -178,39 +185,13 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
           attachments: [...(prev.attachments || []), newAttachment]
         }));
 
-        // Reset inputs
-        setNewDocName('');
-        setSelectedFile(null);
-        setSelectedFileData(null);
+        // Reset file input
         if (fileInputRef.current) fileInputRef.current.value = '';
+        
       } catch (err: any) {
-        console.error("Supabase Storage Upload Failed", err);
-        setError(`Supabase Storage Upload Failed: ${err.message || err}`);
-      } finally {
-        setIsUploadingToDrive(false);
+        console.error("File loading failed", err);
+        setError("File loading failed: " + (err instanceof Error ? err.message : String(err)));
       }
-    } else {
-      if (!selectedFileData) return;
-      const newAttachment: Attachment = {
-        id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-        name: newDocName.trim(),
-        fileName: autoFileName, // Use the same automatic file name for local storage
-        fileType: selectedFile.type,
-        fileData: selectedFileData,
-        uploadedAt: new Date().toISOString()
-      };
-
-      setFormData(prev => ({
-        ...prev,
-        attachments: [...(prev.attachments || []), newAttachment]
-      }));
-
-      // Reset inputs
-      setNewDocName('');
-      setSelectedFile(null);
-      setSelectedFileData(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      setError(null);
     }
   };
 
@@ -308,96 +289,8 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       return;
     }
 
-    // Auto-capture selected scanned document if user forgot to click "+ Add Document"
-    let finalFormData = { ...formData };
-    if (selectedFile && newDocName.trim()) {
-      setIsUploadingToDrive(true);
-      setError("Uploading selected document attachment...");
-      try {
-        const supabaseToken = await getAccessToken();
-        const driveToken = await getDriveAccessToken();
-        const isSupabaseConnected = !!supabaseToken;
-        const isGDriveConnected = !!driveToken;
-        const online = isOnline() && navigator.onLine;
-        
-        let dest: 'local' | 'drive' = 'local';
-        let provider: 'supabase' | 'gdrive' | null = null;
-        
-        if (isGDriveConnected && online) {
-          dest = 'drive';
-          provider = 'gdrive';
-        } else if (isSupabaseConnected && online) {
-          dest = 'drive';
-          provider = 'supabase';
-        }
-
-        const ext = selectedFile.name.split('.').pop() || 'png';
-        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
-
-        let newAttachment: Attachment;
-
-        if (dest === 'drive') {
-          let driveResult;
-          if (provider === 'gdrive') {
-            driveResult = await uploadFileToGDrive(selectedFile, autoFileName, selectedFile.type);
-          } else {
-            driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
-          }
-          newAttachment = {
-            id: 'drive-' + driveResult.id,
-            name: newDocName.trim(),
-            fileName: driveResult.name,
-            fileType: selectedFile.type,
-            fileData: '',
-            uploadedAt: new Date().toISOString(),
-            driveFileId: driveResult.id,
-            driveWebViewLink: driveResult.webViewLink,
-            driveWebContentLink: driveResult.webContentLink,
-            storageProvider: provider as 'supabase' | 'gdrive'
-          };
-        } else {
-          if (!selectedFileData) {
-            throw new Error("No selected file data available");
-          }
-          newAttachment = {
-            id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-            name: newDocName.trim(),
-            fileName: autoFileName,
-            fileType: selectedFile.type,
-            fileData: selectedFileData,
-            uploadedAt: new Date().toISOString()
-          };
-        }
-
-        finalFormData = {
-          ...formData,
-          attachments: [...(formData.attachments || []), newAttachment]
-        };
-
-        // Update local state to match
-        setFormData(finalFormData);
-
-        // Reset inputs
-        setNewDocName('');
-        setSelectedFile(null);
-        setSelectedFileData(null);
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        setError(null);
-      } catch (err: any) {
-        console.error("Auto-add of attachment failed during save", err);
-        setError(`Failed to save: could not upload pending attachment. ${err.message || err}`);
-        setIsUploadingToDrive(false);
-        return;
-      } finally {
-        setIsUploadingToDrive(false);
-      }
-    }
-
     setError(null);
-    onSave(finalFormData);
+    onSave(formData);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -656,40 +549,46 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       </h3>
                       
                       <div className="space-y-4">
-                        {/* Unified Row: Name and File Selector */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Automated Background Sync UI */}
+                        <div className="grid grid-cols-1 gap-4">
                           <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Name / Label</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Birth Certificate, Diploma, Contract"
-                              value={newDocName}
-                              onChange={e => setNewDocName(e.target.value)}
-                              className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white h-10"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document File</label>
-                            <div className="flex gap-3">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Fast Attachment / Auto-Sync</label>
+                            <div className="flex flex-col gap-2">
                               <input
                                 type="file"
                                 accept="image/*,application/pdf"
                                 onChange={handleAttachmentFileChange}
                                 ref={fileInputRef}
                                 className="hidden"
+                                multiple
                               />
                               <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="w-full px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-[var(--gold)] transition-colors text-xs text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2 bg-white h-10 truncate"
+                                className="w-full px-4 py-8 border-2 border-dashed border-slate-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/30 transition-all text-xs text-slate-500 hover:text-slate-700 flex flex-col items-center justify-center gap-3 bg-white shadow-sm group"
                               >
-                                <FileText size={16} className="shrink-0" />
-                                <span className="truncate">{selectedFile ? selectedFile.name : "Select Image/Scan File"}</span>
+                                <div className="p-3 bg-slate-50 rounded-full group-hover:bg-indigo-100 transition-colors">
+                                  <FileUp size={24} className="text-slate-400 group-hover:text-indigo-600" />
+                                </div>
+                                <div className="text-center">
+                                  <p className="font-bold text-slate-700">Drop files here or click to upload</p>
+                                  <p className="text-[10px] text-slate-400 mt-1">PDF or Images (Auto-converted to PDF)</p>
+                                </div>
                               </button>
                             </div>
                           </div>
                         </div>
+
+                        {/* Sync Status Overlay */}
+                        {syncQueue.length > 0 && (
+                          <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl animate-pulse">
+                            <Loader2 size={16} className="animate-spin text-indigo-600" />
+                            <div className="flex-1">
+                              <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Background Sync Active</p>
+                              <p className="text-[9px] text-indigo-500 italic">Pushing {syncQueue.length} files to Cloud Storage...</p>
+                            </div>
+                          </div>
+                        )}
 
                         {/* Auto-detected Destination Status Indicator */}
                         <div className="flex items-center gap-2 px-1 text-[10px] text-slate-400 font-medium">
@@ -705,53 +604,17 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                           )}
                         </div>
 
-                        {/* File Naming Preview Box */}
-                        {selectedFile && (
-                          <div className="bg-slate-100/80 border border-slate-200 rounded-xl p-3 mt-2 text-xs">
-                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">✨ Automatic Standardized Filename Preview:</span>
-                            <div className="font-mono text-[10px] text-indigo-600 font-bold break-all flex items-center gap-1.5 bg-white p-2 rounded-lg border border-slate-200">
-                              <FileText size={12} className="text-indigo-500 shrink-0" />
-                              {(() => {
-                                const ext = selectedFile.name.split('.').pop() || 'png';
-                                const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-                                const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-                                const sanitizedDoc = (newDocName || 'Doc').trim().replace(/[^a-zA-Z0-9]/g, '_');
-                                return `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_[timestamp].${ext}`;
-                              })()}
-                            </div>
-                          </div>
-                        )}
                       </div>
 
                       {!isDriveConnected && (
                         <p className="mt-3 text-[9px] text-amber-500 italic">💡 Connect Cloud Storage in the Data Center to enable automated cloud storage with automatic file naming.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'drive' && (
-                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your {storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}.</p>
+                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ Background sync enabled. Files are automatically named and synced to your {storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'local' && (
                         <p className="mt-3 text-[9px] text-amber-500 italic">⚠️ Offline mode detected. File will be automatically saved locally and synchronized online later.</p>
                       )}
-                      
-                      <div className="mt-4 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={handleAddAttachment}
-                          disabled={isUploadingToDrive || !newDocName.trim() || !selectedFile || (uploadDestination === 'local' && !selectedFileData)}
-                          className="px-6 py-2 bg-[var(--gold)] text-[var(--navy)] text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-opacity-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
-                        >
-                          {isUploadingToDrive ? (
-                            <>
-                              <Loader2 size={14} className="animate-spin" />
-                              Uploading to Drive...
-                            </>
-                          ) : (
-                            <>
-                              <Plus size={14} /> Add Document
-                            </>
-                          )}
-                        </button>
-                      </div>
                     </div>
                   </div>
 

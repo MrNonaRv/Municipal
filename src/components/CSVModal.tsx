@@ -828,6 +828,11 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                           <strong>Action Required:</strong> Please ensure that <strong>Cloud Firestore</strong> is enabled in your <a href={`https://console.firebase.google.com/u/0/project/hr-main-datastorage-mam/firestore`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a>. Click "Create database" if it hasn't been created yet.
                         </div>
                       )}
+                      {(error.includes('403') || error.includes('access_denied')) && (
+                        <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
+                          <strong>Action Required:</strong> Your Google Project is in "Testing" mode. You must add <code>{driveUser?.email || 'your email'}</code> as a <strong>Test User</strong> in the <a href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Google Cloud Console</a> or click <strong>"Publish App"</strong>.
+                        </div>
+                      )}
                     </div>
                   )}
 

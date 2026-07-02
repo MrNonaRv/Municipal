@@ -2,5 +2,5 @@
   "name": "GovRecords Desktop",
   "description": "Desktop application for Government Employee Records Management with local persistence and autosave.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API", "MAJOR_CAPABILITY_GOOGLE_WORKSPACE"]
 }

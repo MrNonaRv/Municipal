@@ -9,7 +9,7 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = localStorage.getItem('GersDriveAccessToken');
 let isSigningIn = false;
 
 export const initDriveAuth = (
@@ -20,11 +20,21 @@ export const initDriveAuth = (
     if (user) {
       if (cachedAccessToken) {
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
-      } else if (!isSigningIn) {
-        // Try to re-auth silently or wait for user to click sign in
-        if (onAuthFailure) onAuthFailure();
+      } else {
+        // Even if user is authenticated in Firebase, we might have lost the Google OAuth token
+        // In a real app we might use refresh tokens, but here we check storage
+        const storedToken = localStorage.getItem('GersDriveAccessToken');
+        if (storedToken) {
+          cachedAccessToken = storedToken;
+          if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
+        } else if (!isSigningIn) {
+          if (onAuthFailure) onAuthFailure();
+        }
       }
     } else {
+      // Don't remove token from localStorage here, as onAuthStateChanged might fire with null 
+      // during initialization or brief connectivity drops.
+      // Only remove on explicit logout.
       cachedAccessToken = null;
       if (onAuthFailure) onAuthFailure();
     }
@@ -42,6 +52,7 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    localStorage.setItem('GersDriveAccessToken', cachedAccessToken);
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     isSigningIn = false;
@@ -59,12 +70,16 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getDriveAccessToken = async (): Promise<string | null> => {
+  if (!cachedAccessToken) {
+    cachedAccessToken = localStorage.getItem('GersDriveAccessToken');
+  }
   return cachedAccessToken;
 };
 
 export const driveLogout = async () => {
   await auth.signOut();
   cachedAccessToken = null;
+  localStorage.removeItem('GersDriveAccessToken');
 };
 
 export const uploadFileToDrive = async (
