@@ -807,10 +807,24 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                         </svg>
                       </div>
                       <span className="gsi-material-button-contents">
-                        {isLoggingInDrive ? 'Signing in...' : 'Sign in with Google'}
+                        {isLoggingInDrive ? 'Connecting...' : 'Sign in with Google'}
                       </span>
                     </div>
                   </button>
+
+                  {error && (
+                    <div className="bg-rose-50 p-3 rounded-lg border border-rose-100 text-[10px] text-rose-600 max-w-sm flex flex-col gap-2">
+                      <div className="flex items-center gap-2 font-bold uppercase tracking-wider">
+                        <AlertTriangle size={14} /> Connection Error
+                      </div>
+                      <p>{error}</p>
+                      {error.includes('unauthorized-domain') && (
+                        <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
+                          <strong>Note:</strong> You must add <code>{window.location.hostname}</code> to the <strong>Authorized domains</strong> list in your Firebase Console (Authentication &gt; Settings).
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   <div className="bg-slate-50 p-4 rounded-lg border text-[10px] text-slate-500 space-y-2 max-w-sm text-center">
                     <p>

@@ -32,18 +32,26 @@ export const initDriveAuth = (
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
+  if (isSigningIn) return null;
   try {
     isSigningIn = true;
     const result = await signInWithPopup(auth, provider);
     const credential = GoogleAuthProvider.credentialFromResult(result);
     if (!credential?.accessToken) {
-      throw new Error('Failed to get access token from Firebase Auth');
+      throw new Error('Failed to get access token from Google.');
     }
 
     cachedAccessToken = credential.accessToken;
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
+    isSigningIn = false;
     console.error('Sign in error:', error);
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error('Sign-in popup was blocked. Please allow popups for this site.');
+    }
+    if (error.code === 'auth/unauthorized-domain') {
+      throw new Error('This domain is not authorized in Firebase Console (Auth > Settings > Authorized Domains).');
+    }
     throw error;
   } finally {
     isSigningIn = false;
