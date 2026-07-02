@@ -15,8 +15,6 @@ import { motion, AnimatePresence } from 'motion/react';
 import { getAccessToken, initAuth } from './services/supabaseStorage';
 import { getDriveAccessToken, initDriveAuth } from './services/driveStorage';
 
-import { useStoragePersistence } from './hooks/useStoragePersistence';
-
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,17 +24,11 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Storage and Persistence Layer
-  const { 
-    isDriveConnected, 
-    driveUser, 
-    storageProvider, 
-    setDriveUser, 
-    setIsDriveConnected, 
-    setStorageProvider 
-  } = useStoragePersistence();
-
+  // Storage states
+  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  const [driveUser, setDriveUser] = useState<any>(null);
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
+  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(null);
 
   // Offline Sync States
   const [workMode, setWorkModeState] = useState<WorkMode>(getWorkMode());
@@ -56,7 +48,6 @@ export default function App() {
 
   useEffect(() => {
     loadEmployees();
-
 
     // Setup online/offline listeners & sync triggers
     const updateOnlineStatus = async () => {

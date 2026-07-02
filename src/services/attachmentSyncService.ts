@@ -11,6 +11,10 @@ export interface SyncAttachmentResult {
   error?: string;
 }
 
+/**
+ * Syncs an attachment to the selected cloud provider (Supabase or GDrive).
+ * Supabase is a great free alternative if you want to avoid Google Cloud billing hurdles.
+ */
 export const syncAttachment = async (
   file: File | Blob,
   fileName: string,

@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { getAccessToken, initAuth } from '../services/supabaseStorage';
 import { getDriveAccessToken, initDriveAuth } from '../services/driveStorage';
 
+/**
+ * Hook to manage storage connection persistence across reloads.
+ * Uses localStorage to remember the preferred provider and session tokens.
+ */
 export function useStoragePersistence() {
   const [isDriveConnected, setIsDriveConnected] = useState(() => {
     const provider = localStorage.getItem('gers_storage_provider');

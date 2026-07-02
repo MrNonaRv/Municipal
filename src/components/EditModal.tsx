@@ -49,6 +49,9 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   // States for Scanned Documents Attachment
+  const [newDocName, setNewDocName] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
   const [syncQueue, setSyncQueue] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -91,6 +94,8 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   // Background Attachment Sync Service
   useEffect(() => {
     const processSyncQueue = async () => {
+      if (!formData) return;
+      
       const pendingSync = formData.attachments?.filter(a => 
         a.fileData && 
         !a.driveFileId && 
@@ -589,21 +594,6 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                             </div>
                           </div>
                         )}
-
-                        {/* Auto-detected Destination Status Indicator */}
-                        <div className="flex items-center gap-2 px-1 text-[10px] text-slate-400 font-medium">
-                          <div className={`w-1.5 h-1.5 rounded-full ${isDriveConnected && uploadDestination === 'drive' ? 'bg-indigo-500 animate-pulse' : 'bg-amber-500'}`} />
-                          {isDriveConnected && uploadDestination === 'drive' ? (
-                            <span className="flex items-center gap-1">
-                              System auto-detected connection. Saving directly to <strong className="text-indigo-600 font-semibold">{storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}</strong>.
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              System auto-detected offline/unlinked. Saving to <strong className="text-amber-600 font-semibold">Local Storage</strong> {!isDriveConnected ? "(Storage unlinked)" : "(Offline mode)"}.
-                            </span>
-                          )}
-                        </div>
-
                       </div>
 
                       {!isDriveConnected && (
