@@ -12,7 +12,6 @@ import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getAccessToken, initAuth } from './services/supabaseStorage';
 import { getDriveAccessToken, initDriveAuth } from './services/driveStorage';
 
 export default function App() {
@@ -25,14 +24,13 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Storage states
-  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(
-    localStorage.getItem('gers_storage_provider') as 'supabase' | 'gdrive' | null
+  const [storageProvider, setStorageProvider] = useState<'gdrive' | null>(
+    localStorage.getItem('gers_storage_provider') as 'gdrive' | null
   );
 
   const [isDriveConnected, setIsDriveConnected] = useState(() => {
     const hasToken = !!localStorage.getItem('google_drive_access_token');
-    const hasSupabaseUser = !!localStorage.getItem('gers_supabase_user');
-    return !!storageProvider && (hasToken || hasSupabaseUser);
+    return !!storageProvider && hasToken;
   });
 
   const [driveUser, setDriveUser] = useState<any>(() => {
@@ -40,16 +38,13 @@ export default function App() {
     if (provider === 'gdrive') {
       const saved = localStorage.getItem('gers_drive_user');
       return saved ? JSON.parse(saved) : null;
-    } else if (provider === 'supabase') {
-      const saved = localStorage.getItem('gers_supabase_user');
-      return saved ? JSON.parse(saved) : null;
     }
     return null;
   });
 
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
 
-  const updateStorageProvider = (provider: 'supabase' | 'gdrive' | null) => {
+  const updateStorageProvider = (provider: 'gdrive' | null) => {
     setStorageProvider(provider);
     if (provider) {
       localStorage.setItem('gers_storage_provider', provider);
@@ -69,7 +64,7 @@ export default function App() {
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
   const [editTab, setEditTab] = useState<'service' | 'attachments'>('service');
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
-  const [csvModalTab, setCsvModalTab] = useState<'bulk' | 'single' | 'export' | 'gdrive' | 'supabase'>('bulk');
+  const [csvModalTab, setCsvModalTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>('bulk');
   const [deletingEmp, setDeletingEmp] = useState<Employee | null>(null);
 
   const { toasts, addToast, removeToast } = useToast();
@@ -114,41 +109,14 @@ export default function App() {
     checkInitialSync();
 
     // Check initial storage connections
-    getAccessToken().then(token => {
-      if (token) {
-        setIsDriveConnected(true);
-        // Only set as provider if none is already set or if it matches the preference
-        if (!storageProvider || storageProvider === 'supabase') {
-          updateStorageProvider('supabase');
-        }
-      }
-    });
-
     getDriveAccessToken().then(token => {
       if (token) {
         setIsDriveConnected(true);
-        // Only set as provider if none is already set or if it matches the preference
-        if (!storageProvider || storageProvider === 'gdrive') {
-          updateStorageProvider('gdrive');
-        }
+        updateStorageProvider('gdrive');
       }
     });
 
-    const unsubscribeSupabase = initAuth(
-      (user, token) => {
-        setIsDriveConnected(true);
-        setDriveUser(user);
-        updateStorageProvider('supabase');
-      },
-      () => {
-        // Only reset if this was the active provider
-        if (localStorage.getItem('gers_storage_provider') === 'supabase') {
-          setIsDriveConnected(false);
-          setDriveUser(null);
-          updateStorageProvider(null);
-        }
-      }
-    );
+
 
     const unsubscribeDrive = initDriveAuth(
       (user, token) => {
@@ -170,7 +138,7 @@ export default function App() {
     const handleDriveStatusChanged = (e: any) => {
       setIsDriveConnected(e.detail.connected);
       if (e.detail.connected) {
-        const newProvider = e.detail.provider || 'supabase';
+        const newProvider = e.detail.provider || 'gdrive';
         updateStorageProvider(newProvider);
         setDriveUser(e.detail.user || { email: e.detail.email });
       } else {
@@ -274,7 +242,6 @@ export default function App() {
     });
 
     return () => {
-      unsubscribeSupabase();
       unsubscribeDrive();
       clearInterval(checkServerInterval);
       window.removeEventListener('online', updateOnlineStatus);
@@ -289,7 +256,7 @@ export default function App() {
   }, []);
 
   const handleConnectDrive = () => {
-    setCsvModalTab('gdrive'); // Will map to 'supabase' in the modal tab
+    setCsvModalTab('gdrive');
     setIsCSVModalOpen(true);
   };
 
@@ -447,7 +414,7 @@ export default function App() {
             <button
               onClick={handleConnectDrive}
               disabled={isDriveConnecting}
-              aria-label="Link Supabase Storage"
+              aria-label="Link Google Drive Storage"
               className={`flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium transition-all hover:scale-105 active:scale-95 flex-1 sm:flex-initial justify-center ${
                 isDriveConnected
                   ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20'
@@ -462,7 +429,7 @@ export default function App() {
                 <CloudOff size={16} />
               )}
               <span className="inline">
-                {isDriveConnecting ? 'Connecting...' : isDriveConnected ? (storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage') : 'Link Storage'}
+                {isDriveConnecting ? 'Connecting...' : isDriveConnected ? 'Google Drive' : 'Link Storage'}
               </span>
             </button>
             <button 

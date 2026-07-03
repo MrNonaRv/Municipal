@@ -3,10 +3,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs/promises';
 import crypto from 'crypto';
+import { PassThrough } from 'stream';
+import { exec } from 'child_process';
+import os from 'os';
 import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
-import { createClient } from '@supabase/supabase-js';
 import { google } from 'googleapis';
 import initialDatabase from './database.json';
 
@@ -332,16 +334,26 @@ app.use(async (req, res, next) => {
 });
 
 // API Routes
-app.get('/api/health', (req, res) => {
+app.get('/api/health', async (req, res) => {
+  let dbStatus = 'unknown';
+  try {
+    const result = await db.select().from(employees).limit(1);
+    dbStatus = 'connected';
+  } catch (e) {
+    dbStatus = 'error: ' + (e instanceof Error ? e.message : String(e));
+  }
+
   res.json({ 
     status: 'ok', 
+    db: dbStatus,
     time: new Date().toISOString(),
-    env: process.env.VERCEL ? 'vercel' : 'standalone'
+    env: process.env.VERCEL ? 'vercel' : 'standalone',
+    uptime: process.uptime()
   });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', time: new Date().toISOString() });
+  res.status(200).send('OK');
 });
 
 app.get('/api/employees', async (req, res) => {
@@ -401,230 +413,6 @@ app.get('/api/employees', async (req, res) => {
   }
 });
 
-// Supabase Storage Server-Side Integration
-async function getSupabaseConfig(): Promise<{ supabaseUrl: string; supabaseKey: string; supabaseBucket: string }> {
-  // Check if env variables exist first (can override database config)
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {
-      supabaseUrl: process.env.SUPABASE_URL,
-      supabaseKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      supabaseBucket: process.env.SUPABASE_BUCKET || 'records',
-    };
-  }
-
-  const configStr = dbCache['supabase_config'];
-  if (!configStr) {
-    throw new Error('Supabase Storage is not linked. Please configure it in the Settings/Data Center modal.');
-  }
-
-  let config: any;
-  try {
-    config = JSON.parse(decrypt(configStr));
-  } catch (err) {
-    config = JSON.parse(configStr);
-  }
-
-  if (!config.supabaseUrl || !config.supabaseKey) {
-    throw new Error('Invalid Supabase configuration.');
-  }
-
-  return {
-    supabaseUrl: config.supabaseUrl,
-    supabaseKey: config.supabaseKey,
-    supabaseBucket: config.supabaseBucket || 'records',
-  };
-}
-
-async function getSupabaseClient() {
-  const { supabaseUrl, supabaseKey, supabaseBucket } = await getSupabaseConfig();
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase URL or Key is missing.');
-  }
-  const client = createClient(supabaseUrl, supabaseKey, {
-    auth: {
-      persistSession: false,
-    },
-  });
-  return { client, bucket: supabaseBucket };
-}
-
-app.get('/api/supabase/config', async (req, res) => {
-  try {
-    // Check if env variables are set (acting as active auto-connection)
-    if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return res.json({
-        connected: true,
-        supabaseUrl: process.env.SUPABASE_URL,
-        supabaseBucket: process.env.SUPABASE_BUCKET || 'records',
-      });
-    }
-
-    const configStr = dbCache['supabase_config'];
-    if (!configStr) {
-      return res.json({ connected: false });
-    }
-
-    let config: any;
-    try {
-      config = JSON.parse(decrypt(configStr));
-    } catch (err) {
-      config = JSON.parse(configStr);
-    }
-
-    return res.json({
-      connected: true,
-      supabaseUrl: config.supabaseUrl || '',
-      supabaseBucket: config.supabaseBucket || 'records',
-    });
-  } catch (error) {
-    console.error(error);
-    res.json({ connected: false });
-  }
-});
-
-app.post('/api/supabase/config', async (req, res) => {
-  try {
-    const { supabaseUrl, supabaseKey, supabaseBucket } = req.body;
-    if (!supabaseUrl || !supabaseKey) {
-      return res.status(400).json({ error: 'Missing supabaseUrl or supabaseKey' });
-    }
-
-    const config = {
-      supabaseUrl,
-      supabaseKey,
-      supabaseBucket: supabaseBucket || 'records',
-    };
-
-    const encryptedData = encrypt(JSON.stringify(config));
-    dbCache['supabase_config'] = encryptedData;
-    await saveDb();
-
-    if (firestoreDb) {
-      try {
-        await setDoc(doc(firestoreDb, 'app_data', 'supabase_config'), { value: encryptedData });
-        console.log('[Firebase] Synchronized Supabase configuration to Firestore.');
-      } catch (fsErr) {
-        console.error('[Firebase] Failed to write Supabase config to Firestore:', fsErr);
-      }
-    }
-
-    res.json({
-      success: true,
-      connected: true,
-      supabaseUrl,
-      supabaseBucket: supabaseBucket || 'records',
-    });
-  } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: error.message || 'Failed to save Supabase configuration' });
-  }
-});
-
-app.post('/api/supabase/disconnect', async (req, res) => {
-  try {
-    if (dbCache['supabase_config']) {
-      delete dbCache['supabase_config'];
-      await saveDb();
-    }
-    if (firestoreDb) {
-      try {
-        await deleteDoc(doc(firestoreDb, 'app_data', 'supabase_config'));
-        console.log('[Firebase] Synchronized Supabase disconnection to Firestore.');
-      } catch (fsErr) {
-        console.error('[Firebase] Failed to delete Supabase config from Firestore:', fsErr);
-      }
-    }
-    res.json({ success: true, connected: false });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to unlink Supabase Storage' });
-  }
-});
-
-app.post('/api/supabase/upload', async (req, res) => {
-  try {
-    const { fileName, mimeType, fileData } = req.body;
-    if (!fileName || !mimeType || !fileData) {
-      return res.status(400).json({ error: 'Missing fileName, mimeType, or fileData' });
-    }
-
-    const { client, bucket } = await getSupabaseClient();
-    const fileBuffer = Buffer.from(fileData, 'base64');
-    
-    // Ensure clean unique filename
-    const uniquePath = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9_.-]/g, '_')}`;
-
-    const { data, error } = await client.storage
-      .from(bucket)
-      .upload(uniquePath, fileBuffer, {
-        contentType: mimeType,
-        upsert: true,
-      });
-
-    if (error) {
-      throw error;
-    }
-
-    const { data: publicUrlData } = client.storage.from(bucket).getPublicUrl(uniquePath);
-    const publicUrl = publicUrlData?.publicUrl || '';
-
-    // To prevent any client breakdown, we return fields expected by the client side:
-    // id, name, url, webViewLink, webContentLink. All map to the same file.
-    res.json({
-      id: uniquePath,
-      name: fileName,
-      url: publicUrl,
-      webViewLink: publicUrl,
-      webContentLink: publicUrl,
-    });
-  } catch (error: any) {
-    console.error('Server Supabase upload error:', error);
-    res.status(500).json({ error: error.message || 'Failed to upload file to Supabase' });
-  }
-});
-
-app.get('/api/supabase/download/:fileId', async (req, res) => {
-  try {
-    const fileId = req.params.fileId;
-    const { client, bucket } = await getSupabaseClient();
-
-    const { data, error } = await client.storage.from(bucket).download(fileId);
-    if (error || !data) {
-      throw error || new Error('Failed to download file from Supabase storage.');
-    }
-
-    const buffer = Buffer.from(await data.arrayBuffer());
-    
-    // Attempt to extract original filename from fileId (removes timestamp prefix)
-    const underscoreIndex = fileId.indexOf('_');
-    const filename = underscoreIndex !== -1 ? fileId.substring(underscoreIndex + 1) : fileId;
-
-    res.setHeader('Content-Type', data.type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
-    res.send(buffer);
-  } catch (error: any) {
-    console.error('Server Supabase download error:', error);
-    res.status(500).send(error.message || 'Failed to download file from Supabase');
-  }
-});
-
-app.delete('/api/supabase/delete/:fileId', async (req, res) => {
-  try {
-    const fileId = req.params.fileId;
-    const { client, bucket } = await getSupabaseClient();
-
-    const { data, error } = await client.storage.from(bucket).remove([fileId]);
-    if (error) {
-      throw error;
-    }
-
-    res.json({ success: true });
-  } catch (error: any) {
-    console.error('Server Supabase delete error:', error);
-    res.status(500).json({ error: error.message || 'Failed to delete file from Supabase' });
-  }
-});
-
 // Google Drive Integration Endpoints
 app.post('/api/drive/upload', async (req, res) => {
   try {
@@ -671,7 +459,7 @@ app.post('/api/drive/upload', async (req, res) => {
     // Extract base64 data
     const base64Data = fileData.split(';base64,').pop();
     const buffer = Buffer.from(base64Data, 'base64');
-    const bufferStream = new (require('stream').PassThrough)();
+    const bufferStream = new PassThrough();
     bufferStream.end(buffer);
 
     const fileMetadata: any = {
@@ -913,8 +701,6 @@ async function startServer() {
     // Automatically open browser if running locally (not in Vercel)
     if (!process.env.VERCEL && process.env.NODE_ENV === 'production') {
       try {
-        const { exec } = require('child_process');
-        const os = require('os');
         const url = `http://localhost:${PORT}`;
         const platform = os.platform();
         if (platform === 'win32') {

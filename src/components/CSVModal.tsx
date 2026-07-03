@@ -6,7 +6,6 @@ import {
   Key, Shield, HelpCircle, Check, Lock, Clock, Trash2, Plus, Edit, UploadCloud, 
   AlertTriangle, Calendar, Search, Filter, LogOut
 } from 'lucide-react';
-import { checkSupabaseStatus, saveSupabaseConfig, logout as unlinkSupabase, SupabaseStatus } from '../services/supabaseStorage';
 import { initDriveAuth, googleSignIn, driveLogout, getDriveAccessToken } from '../services/driveStorage';
 import { getActivityLogs, clearActivityLogs, ActivityLog } from '../services/db';
 
@@ -15,24 +14,19 @@ interface Props {
   onImport: (data: Employee[]) => Promise<void> | void;
   onClear?: () => Promise<void> | void;
   employees: Employee[];
-  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive' | 'supabase' | 'logs';
+  initialTab?: 'bulk' | 'single' | 'export' | 'gdrive' | 'logs';
 }
 
 export default function CSVModal({ onClose, onImport, onClear, employees, initialTab }: Props) {
-  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'supabase' | 'logs' | 'gdrive'>(initialTab || 'bulk');
+  const [activeTab, setActiveTab] = useState<'bulk' | 'single' | 'export' | 'logs' | 'gdrive'>(
+    (initialTab as any) || 'bulk'
+  );
   const [previewData, setPreviewData] = useState<Employee[]>([]);
   const [selectedForExport, setSelectedForExport] = useState<Set<string>>(new Set(employees.map(e => e.id)));
   const [isImporting, setIsImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Supabase Config State
-  const [supabaseStatus, setSupabaseStatus] = useState<SupabaseStatus | null>(null);
-  const [supabaseUrl, setSupabaseUrl] = useState('');
-  const [supabaseKey, setSupabaseKey] = useState('');
-  const [supabaseBucket, setSupabaseBucket] = useState('records');
-  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
   // Google Drive State
   const [isDriveConnected, setIsDriveConnected] = useState(false);
@@ -45,15 +39,7 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
   const [logFilter, setLogFilter] = useState<'ALL' | 'ADD' | 'MODIFY' | 'DELETE' | 'IMPORT' | 'CLEAR'>('ALL');
 
   useEffect(() => {
-    if (activeTab === 'supabase') {
-      checkSupabaseStatus().then(status => {
-        setSupabaseStatus(status);
-        if (status.connected) {
-          if (status.supabaseUrl) setSupabaseUrl(status.supabaseUrl);
-          if (status.supabaseBucket) setSupabaseBucket(status.supabaseBucket);
-        }
-      });
-    } else if (activeTab === 'gdrive') {
+    if (activeTab === 'gdrive') {
       initDriveAuth(
         (user) => {
           setDriveUser(user);
@@ -381,16 +367,6 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
           </button>
           <button 
             role="tab" 
-            id="tab-supabase"
-            aria-controls="panel-supabase"
-            aria-selected={activeTab === 'supabase'} 
-            onClick={() => setActiveTab('supabase')} 
-            className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'supabase' ? 'border-[var(--gold)] text-[var(--navy)]' : 'border-transparent text-gray-500'}`}
-          >
-            <Cloud size={16}/> Supabase
-          </button>
-          <button 
-            role="tab" 
             id="tab-gdrive"
             aria-controls="panel-gdrive"
             aria-selected={activeTab === 'gdrive'} 
@@ -537,158 +513,6 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
             </div>
           )}
 
-          {activeTab === 'supabase' && (
-            <div className="space-y-6">
-              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-                <h3 className="font-bold text-[var(--navy)] flex items-center gap-2 mb-2 text-sm">
-                  <Cloud size={18} className="text-indigo-500" />
-                  System-Wide Supabase Storage
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Establish a single, hardcoded Supabase connection. Once set up, all scanned employee documents
-                  will save directly to your organization's Supabase Storage bucket. All users can instantly upload and access
-                  files securely through our server-side proxy.
-                </p>
-              </div>
-
-              {supabaseStatus?.connected ? (
-                <div className="space-y-4">
-                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-lg flex items-start gap-3">
-                    <div className="p-2 bg-emerald-500 text-white rounded-full">
-                      <Check size={16} />
-                    </div>
-                    <div className="space-y-1 flex-1">
-                      <div className="font-bold text-emerald-800 text-sm">System Storage Active</div>
-                      <div className="text-xs text-emerald-700">
-                        <span className="font-medium">Supabase URL:</span>{' '}
-                        <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{supabaseStatus.supabaseUrl}</code>
-                      </div>
-                      <div className="text-xs text-emerald-700">
-                        <span className="font-medium">Target Bucket Name:</span>{' '}
-                        <code className="bg-emerald-100 px-1 py-0.5 rounded font-mono">{supabaseStatus.supabaseBucket || 'records'}</code>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-200/50 text-xs text-blue-800 space-y-1.5 font-sans">
-                    <div className="font-bold flex items-center gap-1.5 text-blue-900">
-                      <Shield size={14} /> Security and Authorization
-                    </div>
-                    <p>
-                      Files are securely uploaded server-to-server using encrypted credentials in your database.
-                      Remember to create the storage bucket inside your Supabase project before uploading any files.
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      if (confirm('Are you sure you want to unlink the system Supabase storage? Scanned files will no longer back up to Supabase.')) {
-                        try {
-                          await unlinkSupabase();
-                          const status = await checkSupabaseStatus();
-                          setSupabaseStatus(status);
-                          setError(null);
-                        } catch (err: any) {
-                          setError(err.message || 'Failed to unlink');
-                        }
-                      }
-                    }}
-                    className="w-full py-2.5 bg-red-600 hover:bg-red-700 text-white font-bold rounded-lg transition-colors text-sm"
-                  >
-                    Disconnect Supabase Storage
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Configure System Connection</div>
-                  
-                  <div className="space-y-3">
-                    <div className="space-y-1 font-sans">
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Supabase Project URL
-                      </label>
-                      <input
-                        type="text"
-                        value={supabaseUrl}
-                        onChange={(e) => setSupabaseUrl(e.target.value)}
-                        placeholder="https://your-project-id.supabase.co"
-                        className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
-                      />
-                    </div>
-
-                    <div className="space-y-1 font-sans">
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Supabase API Key / Service Role Key
-                      </label>
-                      <input
-                        type="password"
-                        value={supabaseKey}
-                        onChange={(e) => setSupabaseKey(e.target.value)}
-                        placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                        className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
-                      />
-                    </div>
-
-                    <div className="space-y-1 font-sans">
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Supabase Storage Bucket Name (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={supabaseBucket}
-                        onChange={(e) => setSupabaseBucket(e.target.value)}
-                        placeholder="records"
-                        className="w-full border p-2.5 rounded text-xs focus:ring-1 focus:ring-[var(--gold)] focus:outline-none font-mono"
-                      />
-                      <p className="text-[10px] text-slate-500 font-sans">
-                        Defaults to 'records'. Make sure this bucket is created in your Supabase storage.
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={async () => {
-                      if (!supabaseUrl.trim() || !supabaseKey.trim()) {
-                        setError('Please provide both the Supabase Project URL and API key.');
-                        return;
-                      }
-                      setIsSavingConfig(true);
-                      setError(null);
-                      try {
-                        await saveSupabaseConfig(supabaseUrl, supabaseKey, supabaseBucket || 'records');
-                        const status = await checkSupabaseStatus();
-                        setSupabaseStatus(status);
-                        setSupabaseKey('');
-                        // Trigger a custom event so other components update immediately
-                        window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { detail: status }));
-                      } catch (err: any) {
-                        setError(err.message || 'Invalid credentials or network error');
-                      } finally {
-                        setIsSavingConfig(false);
-                      }
-                    }}
-                    disabled={isSavingConfig}
-                    className="w-full py-2.5 bg-[var(--navy)] text-white font-bold rounded-lg hover:bg-opacity-90 disabled:opacity-50 transition-all flex justify-center items-center gap-2 text-sm"
-                  >
-                    {isSavingConfig ? <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Key size={16} />}
-                    {isSavingConfig ? 'Saving Configuration...' : 'Save Supabase Credentials'}
-                  </button>
-
-                  <div className="bg-slate-100 p-4 rounded-lg border text-xs text-slate-600 space-y-2 font-sans">
-                    <div className="font-bold text-slate-700 flex items-center gap-1">
-                      <HelpCircle size={14} /> Quick Setup Guide
-                    </div>
-                    <ol className="list-decimal pl-4 space-y-1 text-slate-500">
-                      <li>Go to the <a href="https://supabase.com/" target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">Supabase Dashboard</a>.</li>
-                      <li>Create or select your project.</li>
-                      <li>Go to <strong className="text-slate-700">Project Settings &gt; API</strong> and copy the <strong className="text-slate-700">Project URL</strong>.</li>
-                      <li>Copy the <strong className="text-slate-700">service_role</strong> API Key (or <strong className="text-slate-700">anon</strong> key if your bucket is public and has no restriction policy).</li>
-                      <li>Go to <strong className="text-slate-700">Storage</strong>, create a new bucket (e.g. named <code className="bg-slate-200 px-1 py-0.5 rounded font-mono text-[10px]">records</code>) and ensure it's set up with appropriate access.</li>
-                    </ol>
-                  </div>
-                </div>
-              )}
-
               {/* Database Maintenance Section */}
               <div className="pt-6 border-t border-slate-200 mt-6 space-y-4 font-sans">
                 <div className="flex items-center gap-2 text-red-600 font-bold text-sm">
@@ -724,8 +548,6 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                   </button>
                 </div>
               </div>
-            </div>
-          )}
 
           {activeTab === 'gdrive' && (
             <div className="space-y-6">

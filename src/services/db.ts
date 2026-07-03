@@ -44,7 +44,8 @@ export const checkServerConnection = async (retries = 2): Promise<boolean> => {
     
     for (const endpoint of endpoints) {
       try {
-        const response = await fetch(endpoint, { 
+        const fullUrl = `${window.location.origin}${endpoint}`;
+        const response = await fetch(fullUrl, { 
           method: 'GET',
           cache: 'no-cache',
           signal: controller.signal 
