@@ -1,10 +1,9 @@
 {
-  "projectId": "automatic-climate-zgxqk",
-  "appId": "1:557160494463:web:61726a040bf3571277964a",
-  "apiKey": "AIzaSyDdkUg7F-3rd028W8BbdTU9ZTki8-NESR0",
-  "authDomain": "automatic-climate-zgxqk.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-govrecordsdeskto-0c53a86a-a4b3-4c14-8985-c0f6be195564",
-  "storageBucket": "automatic-climate-zgxqk.firebasestorage.app",
-  "messagingSenderId": "557160494463",
-  "measurementId": ""
+  "apiKey": "AIzaSyBgW_6XCKE1H1wy5zh_bN-NFF6gqcWhPWI",
+  "authDomain": "hr-main-datastorage-mam.firebaseapp.com",
+  "projectId": "hr-main-datastorage-mam",
+  "storageBucket": "hr-main-datastorage-mam.firebasestorage.app",
+  "messagingSenderId": "255554692341",
+  "appId": "1:255554692341:web:e0d00c331ae36f337411bc",
+  "measurementId": "G-72QRSBTJG6"
 }

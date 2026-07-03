@@ -12,7 +12,8 @@ import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { useStoragePersistence } from './hooks/useStoragePersistence';
+import { getAccessToken, initAuth } from './services/supabaseStorage';
+import { getDriveAccessToken, initDriveAuth } from './services/driveStorage';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -23,17 +24,11 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Storage and Persistence Layer
-  const { 
-    isDriveConnected, 
-    driveUser, 
-    storageProvider, 
-    setDriveUser, 
-    setIsDriveConnected, 
-    setStorageProvider 
-  } = useStoragePersistence();
-
+  // Storage states
+  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  const [driveUser, setDriveUser] = useState<any>(null);
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
+  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(null);
 
   // Offline Sync States
   const [workMode, setWorkModeState] = useState<WorkMode>(getWorkMode());
@@ -53,6 +48,64 @@ export default function App() {
 
   useEffect(() => {
     loadEmployees();
+
+    // Check initial storage connections
+    getAccessToken().then(token => {
+      if (token) {
+        setIsDriveConnected(true);
+        setStorageProvider('supabase');
+      }
+    });
+
+    getDriveAccessToken().then(token => {
+      if (token) {
+        setIsDriveConnected(true);
+        setStorageProvider('gdrive');
+      }
+    });
+
+    const unsubscribeSupabase = initAuth(
+      (user, token) => {
+        setIsDriveConnected(true);
+        setDriveUser(user);
+        setStorageProvider('supabase');
+      },
+      () => {
+        if (storageProvider === 'supabase') {
+          setIsDriveConnected(false);
+          setDriveUser(null);
+          setStorageProvider(null);
+        }
+      }
+    );
+
+    const unsubscribeDrive = initDriveAuth(
+      (user, token) => {
+        setIsDriveConnected(true);
+        setDriveUser(user);
+        setStorageProvider('gdrive');
+      },
+      () => {
+        if (storageProvider === 'gdrive') {
+          setIsDriveConnected(false);
+          setDriveUser(null);
+          setStorageProvider(null);
+        }
+      }
+    );
+
+    // Setup listener for custom system storage status change
+    const handleDriveStatusChanged = (e: any) => {
+      setIsDriveConnected(e.detail.connected);
+      if (e.detail.connected) {
+        setStorageProvider(e.detail.provider || 'supabase');
+        setDriveUser(e.detail.user || { email: e.detail.email });
+      } else {
+        setDriveUser(null);
+        setStorageProvider(null);
+      }
+    };
+    window.addEventListener('gers_drive_status_changed', handleDriveStatusChanged);
 
     // Setup online/offline listeners & sync triggers
     const updateOnlineStatus = async () => {
@@ -163,11 +216,14 @@ export default function App() {
     });
 
     return () => {
+      unsubscribeSupabase();
+      unsubscribeDrive();
       clearInterval(checkServerInterval);
       window.removeEventListener('online', updateOnlineStatus);
       window.removeEventListener('offline', updateOnlineStatus);
       window.removeEventListener('gers_sync_status_change', handleSyncStatusChange);
       window.removeEventListener('gers_data_synced', handleDataSynced);
+      window.removeEventListener('gers_drive_status_changed', handleDriveStatusChanged);
       window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
       window.removeEventListener('gers_server_reachability_change', handleReachabilityChange);
       window.removeEventListener('gers_trigger_sync', triggerSync);
