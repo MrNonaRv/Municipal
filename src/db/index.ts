@@ -10,14 +10,27 @@ export const createPool = () => {
     user: process.env.SQL_USER,
     password: process.env.SQL_PASSWORD,
     database: process.env.SQL_DB_NAME,
-    connectionTimeoutMillis: 15000,
+    max: 10,
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 5000,
+    keepAlive: true,
   });
 };
 
 const pool = createPool();
 
+let _drizzle: any = null;
+function getDrizzle() {
+  if (!_drizzle) {
+    _drizzle = drizzle(pool, { schema });
+  }
+  return _drizzle;
+}
+
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle SQL pool client:', err);
+  // Idle client errors are often harmless as the pool handles them.
+  // We log as warning unless it's clearly a critical failure.
+  console.warn('PostgreSQL Pool: Unexpected error on idle client:', err.message);
 });
 
 // Resilient Fallback State
@@ -242,7 +255,7 @@ export const db = new Proxy({} as any, {
       checkConnection();
     }
 
-    const realDb = drizzle(pool, { schema });
+    const realDb = getDrizzle();
     const val = (realDb as any)[prop];
     if (typeof val === 'function') {
       return val.bind(realDb);

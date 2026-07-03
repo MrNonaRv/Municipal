@@ -83,11 +83,18 @@ export const getDriveAccessToken = async (): Promise<string | null> => {
   return cachedAccessToken;
 };
 
-export const driveLogout = async () => {
-  await auth.signOut();
+const clearDriveAuth = () => {
   cachedAccessToken = null;
   localStorage.removeItem('google_drive_access_token');
   localStorage.removeItem('gers_drive_user');
+  window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { 
+    detail: { connected: false, provider: null, user: null } 
+  }));
+};
+
+export const driveLogout = async () => {
+  await auth.signOut();
+  clearDriveAuth();
 };
 
 export const uploadFileToDrive = async (
@@ -123,6 +130,10 @@ export const uploadFileToDrive = async (
 
   if (!response.ok) {
     const error = await response.json();
+    if (response.status === 401) {
+      clearDriveAuth();
+      throw new Error('Google Drive session expired. Please reconnect your account.');
+    }
     throw new Error(error.error || 'Failed to upload to Google Drive');
   }
 
@@ -147,6 +158,10 @@ export const downloadFileFromDrive = async (fileId: string): Promise<Blob> => {
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearDriveAuth();
+      throw new Error('Google Drive session expired. Please reconnect your account.');
+    }
     throw new Error(`Failed to download file from Google Drive (${response.statusText})`);
   }
 
@@ -166,6 +181,10 @@ export const deleteFileFromDrive = async (fileId: string): Promise<void> => {
 
   if (!response.ok) {
     const error = await response.json();
+    if (response.status === 401) {
+      clearDriveAuth();
+      throw new Error('Google Drive session expired. Please reconnect your account.');
+    }
     throw new Error(error.error || 'Failed to delete file from Google Drive');
   }
 };

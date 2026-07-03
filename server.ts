@@ -564,7 +564,10 @@ app.post('/api/drive/upload', async (req, res) => {
     }
 
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ 
+      access_token: accessToken,
+      token_type: 'Bearer'
+    });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
     // Ensure dedicated root folder exists: "GovRecords_Attachments"
@@ -588,8 +591,12 @@ app.post('/api/drive/upload', async (req, res) => {
         });
         rootFolderId = createFolderResponse.data.id!;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.warn('Error finding/creating root folder:', err);
+      // If we get a 401 here, it's an auth error
+      if (err.code === 401 || err.response?.status === 401 || err.message?.includes('invalid authentication credentials')) {
+        return res.status(401).json({ error: 'Google Drive authentication expired or invalid. Please reconnect.' });
+      }
     }
 
     let finalFolderId = rootFolderId;
@@ -655,6 +662,9 @@ app.post('/api/drive/upload', async (req, res) => {
     });
   } catch (error: any) {
     console.error('Drive upload error:', error);
+    if (error.code === 401 || error.response?.status === 401 || error.message?.includes('invalid authentication credentials')) {
+      return res.status(401).json({ error: 'Google Drive authentication expired or invalid.' });
+    }
     res.status(500).json({ error: error.message || 'Failed to upload to Google Drive' });
   }
 });
@@ -669,7 +679,10 @@ app.get('/api/drive/download/:fileId', async (req, res) => {
 
     const fileId = req.params.fileId;
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ 
+      access_token: accessToken,
+      token_type: 'Bearer'
+    });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
     const response = await drive.files.get(
@@ -688,6 +701,9 @@ app.get('/api/drive/download/:fileId', async (req, res) => {
     res.send(buffer);
   } catch (error: any) {
     console.error('Drive download error:', error);
+    if (error.code === 401 || error.response?.status === 401 || error.message?.includes('invalid authentication credentials')) {
+      return res.status(401).json({ error: 'Google Drive authentication expired or invalid.' });
+    }
     res.status(500).json({ error: error.message || 'Failed to download from Google Drive' });
   }
 });
@@ -702,13 +718,19 @@ app.delete('/api/drive/delete/:fileId', async (req, res) => {
 
     const fileId = req.params.fileId;
     const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ access_token: accessToken });
+    oauth2Client.setCredentials({ 
+      access_token: accessToken,
+      token_type: 'Bearer'
+    });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
     await drive.files.delete({ fileId });
     res.json({ success: true });
   } catch (error: any) {
     console.error('Drive delete error:', error);
+    if (error.code === 401 || error.response?.status === 401 || error.message?.includes('invalid authentication credentials')) {
+      return res.status(401).json({ error: 'Google Drive authentication expired or invalid.' });
+    }
     res.status(500).json({ error: error.message || 'Failed to delete from Google Drive' });
   }
 });
