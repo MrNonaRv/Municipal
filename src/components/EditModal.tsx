@@ -5,8 +5,8 @@ import { fileToBase64 } from '../utils/helpers';
 import { convertImageToPDF } from '../utils/pdfHelpers';
 import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { uploadFileToSupabase as uploadFileToDrive, downloadFileFromSupabase as downloadFileFromDrive } from '../services/supabaseStorage';
-import { uploadFileToDrive as uploadFileToGDrive, downloadFileFromDrive as downloadFileFromGDrive } from '../services/driveStorage';
+import { uploadFileToSupabase, downloadFileFromSupabase } from '../services/supabaseStorage';
+import { uploadFileToDrive, downloadFileFromDrive } from '../services/driveStorage';
 import { isOnline } from '../services/db';
 import { syncAttachment } from '../services/attachmentSyncService';
 import { useStoragePersistence } from '../hooks/useStoragePersistence';
@@ -223,9 +223,9 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     try {
       let blob;
       if (doc.storageProvider === 'gdrive') {
-        blob = await downloadFileFromGDrive(doc.driveFileId);
-      } else {
         blob = await downloadFileFromDrive(doc.driveFileId);
+      } else {
+        blob = await downloadFileFromSupabase(doc.driveFileId);
       }
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -350,13 +350,35 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         setError(null);
         if (file.type.startsWith('image/')) {
           try {
-            file = await convertImageToPDF(file, file.name);
+            const pdfBlob = await convertImageToPDF(file, file.name);
+            file = new File([pdfBlob], file.name.replace(/\.[^/.]+$/, "") + ".pdf", { type: 'application/pdf' });
           } catch (pdfErr) {
             console.warn("Failed to convert PDS image to PDF, using original image file directly", pdfErr);
           }
         }
+        
         const base64 = await fileToBase64(file);
-        setFormData({ ...formData, pdsScan: base64 });
+        
+        // Standardized naming for PDS
+        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_PDS_OFFICIAL_SCAN_${Date.now()}.pdf`;
+
+        const newAttachment: Attachment = {
+          id: 'pds-' + Date.now(),
+          name: 'PDS Official Scan',
+          fileName: autoFileName,
+          fileType: file.type,
+          fileData: base64,
+          uploadedAt: new Date().toISOString()
+        };
+
+        setFormData(prev => ({
+          ...prev,
+          pdsScan: base64,
+          attachments: [...(prev.attachments || []), newAttachment]
+        }));
+
       } catch (err: any) {
         console.error("PDS Scan upload failed", err);
         setError("PDS Scan upload failed: " + (err instanceof Error ? err.message : String(err)));

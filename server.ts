@@ -8,6 +8,7 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { createClient } from '@supabase/supabase-js';
 import { google } from 'googleapis';
+import { PassThrough } from 'stream';
 import initialDatabase from './database.json';
 
 import { db } from './src/db/index.ts';
@@ -642,7 +643,7 @@ app.post('/api/drive/upload', async (req, res) => {
     // Extract base64 data
     const base64Data = fileData.split(';base64,').pop();
     const buffer = Buffer.from(base64Data, 'base64');
-    const bufferStream = new (require('stream').PassThrough)();
+    const bufferStream = new PassThrough();
     bufferStream.end(buffer);
 
     const fileMetadata = {
