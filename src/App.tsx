@@ -96,7 +96,22 @@ export default function App() {
   };
 
   useEffect(() => {
-    loadEmployees();
+    // Initial data load - force server refresh if reachable to catch other device changes
+    loadEmployees(true);
+
+    // Initial sync check: if we have local changes, try to sync immediately
+    const checkInitialSync = async () => {
+      const pending = getSyncQueue().length;
+      setSyncQueueCount(pending);
+      if (pending > 0 && getWorkMode() !== 'local') {
+        const reachable = await checkServerConnection();
+        if (reachable) {
+          console.log(`[App] Startup detected ${pending} pending items. Triggering sync...`);
+          triggerSync();
+        }
+      }
+    };
+    checkInitialSync();
 
     // Check initial storage connections
     getAccessToken().then(token => {
@@ -278,9 +293,17 @@ export default function App() {
     setIsCSVModalOpen(true);
   };
 
-  const loadEmployees = async () => {
+  const loadEmployees = async (forceServerRefresh = false) => {
     setIsLoading(true);
     try {
+      // If we are online and not in strict local mode, try to fetch from server first if forced or if local is empty
+      const mode = getWorkMode();
+      const reachable = getServerReachable();
+      
+      if (mode !== 'local' && reachable && (forceServerRefresh || employees.length === 0)) {
+        console.log('[loadEmployees] Proactively refreshing data from government server...');
+      }
+
       const data = await dbGetAll();
       setEmployees(data);
     } catch (error) {
@@ -514,16 +537,29 @@ export default function App() {
               </div>
             </div>
 
-            <div className="relative w-full sm:w-64 md:w-80">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-              <input 
-                type="text" 
-                placeholder="Search records..." 
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                aria-label="Search employees"
-                className="w-full pl-10 pr-4 py-2.5 rounded-full bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all text-sm h-10"
-              />
+            <div className="relative w-full sm:w-64 md:w-80 flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                <input 
+                  type="text" 
+                  placeholder="Search records..." 
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  aria-label="Search employees"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-full bg-slate-100 border-transparent focus:bg-white focus:ring-2 focus:ring-[var(--gold)] focus:border-transparent transition-all text-sm h-10"
+                />
+              </div>
+              <button
+                onClick={() => {
+                  addToast('Refreshing records from server...', 'info');
+                  loadEmployees(true);
+                }}
+                disabled={isLoading}
+                title="Refresh records from server"
+                className="p-2.5 rounded-full bg-slate-100 text-slate-500 hover:bg-[var(--gold-light)] hover:text-[var(--gold-dark)] transition-all shrink-0 active:scale-90"
+              >
+                <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+              </button>
             </div>
           </div>
         </div>

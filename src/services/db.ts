@@ -39,7 +39,7 @@ export const checkServerConnection = async (retries = 2): Promise<boolean> => {
     const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
     const response = await fetch('/api/health', { 
-      method: 'HEAD', 
+      method: 'GET', // Using GET instead of HEAD for better compatibility
       cache: 'no-cache',
       signal: controller.signal 
     });
@@ -330,8 +330,16 @@ export const compareEmployeeChanges = (oldEmp: Employee | undefined, newEmp: Emp
 
 // Flag to prevent overlapping sync operations
 let isSyncing = false;
+let lastSyncTime = 0;
 
-export const getIsSyncing = (): boolean => isSyncing;
+export const getIsSyncing = (): boolean => {
+  // If syncing has been "active" for more than 5 minutes, assume it's stuck and allow retry
+  if (isSyncing && Date.now() - lastSyncTime > 300000) {
+    console.warn('[getIsSyncing] Sync appears stuck (active for >5m). Resetting.');
+    isSyncing = false;
+  }
+  return isSyncing;
+};
 
 let syncRetryCount = 0;
 let syncRetryTimeout: NodeJS.Timeout | null = null;
@@ -376,6 +384,7 @@ export const syncOfflineData = async (
   }
 
   isSyncing = true;
+  lastSyncTime = Date.now();
   if (onProgress) onProgress('syncing', queue.length);
   
   addSyncHistoryEvent({
@@ -530,8 +539,8 @@ export const dbGetAll = async (): Promise<Employee[]> => {
     console.log('[dbGetAll] Mode is "local". Returning local cache.');
     return getLocalCache();
   }
-  if (mode === 'auto' && (!online || !lastServerReachable)) {
-    console.warn(`[dbGetAll] Offline fallback (online: ${online}, reachable: ${lastServerReachable}). Returning local cache.`);
+  if (mode === 'auto' && !online) {
+    console.warn(`[dbGetAll] Offline fallback (navigator.onLine: ${online}). Returning local cache.`);
     return getLocalCache();
   }
   try {
