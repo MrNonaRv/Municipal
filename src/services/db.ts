@@ -30,52 +30,38 @@ export const getServerReachable = (): boolean => {
 
 export const checkServerConnection = async (retries = 2): Promise<boolean> => {
   const mode = getWorkMode();
-  console.log(`[checkServerConnection] Checking connection. WorkMode: ${mode}, navigator.onLine: ${navigator.onLine}, retries left: ${retries}`);
   if (mode === 'local') {
-    console.log('[checkServerConnection] WorkMode is "local", skipping connection check and marking server unreachable.');
     setServerReachable(false);
     return false;
   }
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-      console.warn('[checkServerConnection] Connection check timed out after 15000ms.');
-      controller.abort(new Error('timeout'));
-    }, 15000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
     
-    console.log('[checkServerConnection] Fetching /api/health...');
-    const response = await fetch('/api/health', { signal: controller.signal });
+    const response = await fetch('/api/health', { 
+      method: 'HEAD', 
+      cache: 'no-cache',
+      signal: controller.signal 
+    });
     clearTimeout(timeoutId);
     
-    console.log(`[checkServerConnection] /api/health response received. Status: ${response.status} ${response.statusText}`);
     if (response.ok) {
       const wasReachable = lastServerReachable;
-      console.log(`[checkServerConnection] Server is reachable. wasReachable was: ${wasReachable}`);
       setServerReachable(true);
-      // If we just reconnected and we have items in sync queue, automatically trigger a sync!
       const pendingCount = getSyncQueue().length;
       if (!wasReachable && pendingCount > 0) {
-        console.log(`[checkServerConnection] Connection recovered and we have ${pendingCount} pending items. Triggering auto-sync.`);
         window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
       }
       return true;
-    } else {
-      console.warn(`[checkServerConnection] Server returned non-OK status: ${response.status}`);
-      if (retries > 0) {
-        console.log(`[checkServerConnection] Retrying... (${retries} retries left)`);
-        return checkServerConnection(retries - 1);
-      }
-      setServerReachable(false);
-      return false;
+    } else if (retries > 0) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      return checkServerConnection(retries - 1);
     }
+    setServerReachable(false);
+    return false;
   } catch (e: any) {
-    if (e.name === 'AbortError' || e.message === 'timeout') {
-      console.warn('[checkServerConnection] Connection check failed due to timeout.');
-    } else {
-      console.error('[checkServerConnection] Connection check failed with error:', e);
-    }
     if (retries > 0) {
-      console.log(`[checkServerConnection] Retrying... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
       return checkServerConnection(retries - 1);
     }
     setServerReachable(false);

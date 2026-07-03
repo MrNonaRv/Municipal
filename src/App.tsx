@@ -252,7 +252,7 @@ export default function App() {
     // Initial check
     setSyncQueueCount(getSyncQueue().length);
     checkServerConnection().then(reachable => {
-      setIsOnlineState(navigator.onLine);
+      setIsOnlineState(isOnline());
       if (getWorkMode() !== 'local' && navigator.onLine && reachable && getSyncQueue().length > 0) {
         triggerSync();
       }
@@ -372,13 +372,24 @@ export default function App() {
                 {isOnlineState ? (
                   <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet and server">
                     <Wifi size={10} className="text-emerald-400 animate-pulse" />
-                    Online
+                    System Online
                   </span>
                 ) : (
-                  <span className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="No internet connection or server unreachable. Changes are saved locally.">
+                  <button 
+                    onClick={() => {
+                      addToast('Checking server connection...', 'info');
+                      checkServerConnection().then(reachable => {
+                        setIsOnlineState(isOnline());
+                        if (reachable) addToast('Server reconnected!', 'success');
+                        else addToast('Server still unreachable. Check your internet or server status.', 'error');
+                      });
+                    }}
+                    className="px-2 py-0.5 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0 transition-all hover:bg-rose-500/20 active:scale-95" 
+                    title="No internet connection or server unreachable. Click to retry connection check."
+                  >
                     <WifiOff size={10} className="text-rose-400" />
-                    Offline Mode
-                  </span>
+                    Server Offline
+                  </button>
                 )}
 
                 {/* Sync Queue status badge */}
