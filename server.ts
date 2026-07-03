@@ -303,6 +303,9 @@ async function seedRealEmployeesIfNeeded() {
           await db.insert(employees).values(record);
         }
         console.log(`[Seed] Successfully seeded ${recordsToSeed.length} real employee records.`);
+        
+        // Sync the newly seeded records to Firestore immediately
+        await syncDrizzleToFirestore();
       } else {
         console.log('[Seed] No matching employee records found in database.json.');
       }
@@ -319,11 +322,15 @@ async function syncDrizzleToFirestore() {
   
   try {
     const localDbPath = getLocalDbPath();
-    const content = await fs.readFile(localDbPath, 'utf-8');
+    let content = '';
+    try {
+      content = await fs.readFile(localDbPath, 'utf-8');
+    } catch (err) {
+      console.log('[Firebase] Local Drizzle DB file not found, skipping Firestore sync.');
+      return;
+    }
     
-    // Store in a special document in 'app_metadata' or similar
-    // To handle size limits, we can chunk it if needed, but for now let's use 'drizzle_fallback' doc
-    console.log('[Firebase] Syncing local Drizzle database to Firestore...');
+    console.log(`[Firebase] Syncing local Drizzle database (${content.length} bytes) to Firestore...`);
     
     // If it's too large, we'll need to chunk it. 
     // Firestore has a 1MB limit.
@@ -353,6 +360,7 @@ async function loadDrizzleFromFirestore() {
   if (!isFallbackActive() || !firestoreDb) return;
   
   try {
+    console.log('[Firebase] Attempting to restore Drizzle local database from Firestore...');
     const docRef = doc(firestoreDb, 'system_sync', 'drizzle_local_db');
     const docSnap = await getDoc(docRef);
     
@@ -361,6 +369,7 @@ async function loadDrizzleFromFirestore() {
       let content = '';
       
       if (data.chunks) {
+        console.log(`[Firebase] Restoring chunked database (${data.chunks} chunks)...`);
         for (let i = 0; i < data.chunks; i++) {
           const chunkSnap = await getDoc(doc(firestoreDb, 'system_sync', `drizzle_local_db_chunk_${i}`));
           if (chunkSnap.exists()) {
@@ -374,16 +383,31 @@ async function loadDrizzleFromFirestore() {
       if (content) {
         const localDbPath = getLocalDbPath();
         await fs.writeFile(localDbPath, content, 'utf-8');
-        console.log('[Firebase] Successfully restored Drizzle local database from Firestore.');
+        console.log(`[Firebase] Successfully restored Drizzle local database (${content.length} bytes) from Firestore.`);
       }
+    } else {
+      console.log('[Firebase] No Drizzle local database found in Firestore system_sync/drizzle_local_db.');
     }
   } catch (err) {
     console.error('[Firebase] Failed to restore Drizzle fallback from Firestore:', err);
   }
 }
 
+let isInitializing = false;
+
 async function ensureDbLoaded() {
-  if (!dbLoaded) {
+  if (dbLoaded) return;
+  
+  if (isInitializing) {
+    console.log('[DB] Database initialization already in progress, waiting...');
+    while (isInitializing) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return;
+  }
+
+  isInitializing = true;
+  try {
     await initFirebase();
     // Restore Drizzle fallback from Firestore BEFORE seeding or other operations
     await loadDrizzleFromFirestore();
@@ -391,6 +415,11 @@ async function ensureDbLoaded() {
     await loadDb(); // Old sync system
     await seedRealEmployeesIfNeeded();
     dbLoaded = true;
+    console.log('[DB] Database system initialization complete.');
+  } catch (err) {
+    console.error('[DB] Critical error during database initialization:', err);
+  } finally {
+    isInitializing = false;
   }
 }
 
@@ -748,7 +777,7 @@ app.post('/api/employees', async (req, res) => {
     }
 
     res.json({ success: true });
-    syncDrizzleToFirestore();
+    await syncDrizzleToFirestore();
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to save employee' });
@@ -761,7 +790,7 @@ app.delete('/api/employees/:id', async (req, res) => {
     await db.delete(employees).where(eq(employees.originalId, id));
 
     res.json({ success: true });
-    syncDrizzleToFirestore();
+    await syncDrizzleToFirestore();
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete employee' });
   }
@@ -773,7 +802,7 @@ app.post('/api/employees/clear-all', async (req, res) => {
     await db.delete(employees).where(eq(employees.userId, dummyUser.id));
 
     res.json({ success: true });
-    syncDrizzleToFirestore();
+    await syncDrizzleToFirestore();
   } catch (error) {
     console.error('Failed to clear all data:', error);
     res.status(500).json({ error: 'Failed to clear all data' });
