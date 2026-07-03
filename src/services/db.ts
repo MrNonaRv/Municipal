@@ -36,16 +36,32 @@ export const checkServerConnection = async (retries = 2): Promise<boolean> => {
   }
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for cold starts
     
-    const response = await fetch('/api/health', { 
-      method: 'GET', // Using GET instead of HEAD for better compatibility
-      cache: 'no-cache',
-      signal: controller.signal 
-    });
+    // Try both /api/health and /health as fallbacks
+    const endpoints = ['/api/health', '/health'];
+    let success = false;
+    
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint, { 
+          method: 'GET',
+          cache: 'no-cache',
+          signal: controller.signal 
+        });
+        
+        if (response.ok) {
+          success = true;
+          break;
+        }
+      } catch (innerErr) {
+        // Continue to next endpoint
+      }
+    }
+    
     clearTimeout(timeoutId);
     
-    if (response.ok) {
+    if (success) {
       const wasReachable = lastServerReachable;
       setServerReachable(true);
       const pendingCount = getSyncQueue().length;
@@ -54,14 +70,14 @@ export const checkServerConnection = async (retries = 2): Promise<boolean> => {
       }
       return true;
     } else if (retries > 0) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       return checkServerConnection(retries - 1);
     }
     setServerReachable(false);
     return false;
   } catch (e: any) {
     if (retries > 0) {
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
       return checkServerConnection(retries - 1);
     }
     setServerReachable(false);
@@ -532,33 +548,26 @@ export const isOnline = (): boolean => {
 
 export const dbGetAll = async (): Promise<Employee[]> => {
   const mode = getWorkMode();
-  const online = navigator.onLine;
-  console.log(`[dbGetAll] Fetching all employees. Mode: ${mode}, navigator.onLine: ${online}, lastServerReachable: ${lastServerReachable}`);
+  const online = isOnline();
   
-  if (mode === 'local') {
-    console.log('[dbGetAll] Mode is "local". Returning local cache.');
+  if (mode === 'local' || !online) {
+    console.log(`[dbGetAll] Mode: ${mode}, Online: ${online}. Returning local cache.`);
     return getLocalCache();
   }
-  if (mode === 'auto' && !online) {
-    console.warn(`[dbGetAll] Offline fallback (navigator.onLine: ${online}). Returning local cache.`);
-    return getLocalCache();
-  }
+  
   try {
-    console.log('[dbGetAll] Fetching from /api/employees...');
     const response = await fetch('/api/employees');
-    console.log(`[dbGetAll] Response received: ${response.status} ${response.statusText}`);
-    if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
-    const data = await response.json();
-    console.log(`[dbGetAll] Loaded ${data.length} employees from server. Saving to local cache.`);
-    saveLocalCache(data);
-    setServerReachable(true);
-    return data;
-  } catch (error: any) {
-    console.warn('[dbGetAll] Failed to fetch employees from server, falling back to local cache:', error);
-    if (mode === 'auto') {
-      console.log('[dbGetAll] Marking server unreachable due to fetch failure.');
-      setServerReachable(false);
+    if (response.ok) {
+      const data = await response.json();
+      saveLocalCache(data);
+      setServerReachable(true);
+      return data;
     }
+    console.warn(`[dbGetAll] Server returned non-OK status: ${response.status}. Using cache.`);
+    return getLocalCache();
+  } catch (error) {
+    console.error('[dbGetAll] Fetch failed. Using cache.', error);
+    setServerReachable(false);
     return getLocalCache();
   }
 };

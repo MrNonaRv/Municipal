@@ -333,11 +333,15 @@ app.use(async (req, res, next) => {
 
 // API Routes
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ 
+    status: 'ok', 
+    time: new Date().toISOString(),
+    env: process.env.VERCEL ? 'vercel' : 'standalone'
+  });
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', time: new Date().toISOString() });
 });
 
 app.get('/api/employees', async (req, res) => {

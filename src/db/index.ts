@@ -22,18 +22,24 @@ pool.on('error', (err) => {
 
 // Resilient Fallback State
 let useFallbackMode = !process.env.SQL_HOST;
+let connectionChecked = false;
 
-if (!useFallbackMode) {
-  pool.connect()
-    .then((client) => {
-      console.log('[DB] Successfully connected to PostgreSQL database.');
-      client.release();
-    })
-    .catch((err) => {
-      console.warn('[DB] Failed to connect to PostgreSQL database. Falling back to local JSON database.', err.message);
-      useFallbackMode = true;
-    });
-} else {
+async function checkConnection() {
+  if (connectionChecked || useFallbackMode) return;
+  
+  try {
+    const client = await pool.connect();
+    console.log('[DB] Successfully connected to PostgreSQL database.');
+    client.release();
+    connectionChecked = true;
+  } catch (err: any) {
+    console.warn('[DB] Failed to connect to PostgreSQL database. Falling back to local JSON database.', err.message);
+    useFallbackMode = true;
+    connectionChecked = true;
+  }
+}
+
+if (useFallbackMode) {
   console.log('[DB] No SQL_HOST environment variable set. Using local JSON database (local_db.json) fallback.');
 }
 
@@ -217,6 +223,14 @@ export const db = new Proxy({} as any, {
       if (prop === 'update') return updateBuilder;
       if (prop === 'delete') return deleteBuilder;
     }
+    
+    // Ensure we've at least tried to connect if not in fallback mode
+    if (!connectionChecked) {
+      // Note: We can't await here in a getter, but the first real query will handle it via its own async nature if we're careful.
+      // However, checkConnection is fast if already checked.
+      checkConnection();
+    }
+
     const realDb = drizzle(pool, { schema });
     const val = (realDb as any)[prop];
     if (typeof val === 'function') {
