@@ -12,7 +12,7 @@ import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } fro
 import { google } from 'googleapis';
 import initialDatabase from './database.json';
 
-import { db } from './src/db/index.ts';
+import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
 import { employees } from './src/db/schema.ts';
 import { getOrCreateUser } from './src/db/users.ts';
 import { eq } from 'drizzle-orm';
@@ -314,9 +314,81 @@ async function seedRealEmployeesIfNeeded() {
   }
 }
 
+async function syncDrizzleToFirestore() {
+  if (!isFallbackActive() || !firestoreDb) return;
+  
+  try {
+    const localDbPath = getLocalDbPath();
+    const content = await fs.readFile(localDbPath, 'utf-8');
+    
+    // Store in a special document in 'app_metadata' or similar
+    // To handle size limits, we can chunk it if needed, but for now let's use 'drizzle_fallback' doc
+    console.log('[Firebase] Syncing local Drizzle database to Firestore...');
+    
+    // If it's too large, we'll need to chunk it. 
+    // Firestore has a 1MB limit.
+    if (content.length > 900000) {
+      const numChunks = Math.ceil(content.length / 800000);
+      await setDoc(doc(firestoreDb, 'system_sync', 'drizzle_local_db'), { 
+        chunks: numChunks,
+        updatedAt: new Date().toISOString()
+      });
+      for (let i = 0; i < numChunks; i++) {
+        const chunk = content.slice(i * 800000, (i + 1) * 800000);
+        await setDoc(doc(firestoreDb, 'system_sync', `drizzle_local_db_chunk_${i}`), { value: chunk });
+      }
+    } else {
+      await setDoc(doc(firestoreDb, 'system_sync', 'drizzle_local_db'), { 
+        value: content,
+        updatedAt: new Date().toISOString()
+      });
+    }
+    console.log('[Firebase] Drizzle fallback sync complete.');
+  } catch (err) {
+    console.error('[Firebase] Failed to sync Drizzle fallback to Firestore:', err);
+  }
+}
+
+async function loadDrizzleFromFirestore() {
+  if (!isFallbackActive() || !firestoreDb) return;
+  
+  try {
+    const docRef = doc(firestoreDb, 'system_sync', 'drizzle_local_db');
+    const docSnap = await getDoc(docRef);
+    
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      let content = '';
+      
+      if (data.chunks) {
+        for (let i = 0; i < data.chunks; i++) {
+          const chunkSnap = await getDoc(doc(firestoreDb, 'system_sync', `drizzle_local_db_chunk_${i}`));
+          if (chunkSnap.exists()) {
+            content += chunkSnap.data().value;
+          }
+        }
+      } else {
+        content = data.value;
+      }
+      
+      if (content) {
+        const localDbPath = getLocalDbPath();
+        await fs.writeFile(localDbPath, content, 'utf-8');
+        console.log('[Firebase] Successfully restored Drizzle local database from Firestore.');
+      }
+    }
+  } catch (err) {
+    console.error('[Firebase] Failed to restore Drizzle fallback from Firestore:', err);
+  }
+}
+
 async function ensureDbLoaded() {
   if (!dbLoaded) {
-    await loadDb();
+    await initFirebase();
+    // Restore Drizzle fallback from Firestore BEFORE seeding or other operations
+    await loadDrizzleFromFirestore();
+    
+    await loadDb(); // Old sync system
     await seedRealEmployeesIfNeeded();
     dbLoaded = true;
   }
@@ -422,7 +494,7 @@ app.post('/api/drive/upload', async (req, res) => {
       return res.status(401).json({ error: 'Missing access token' });
     }
 
-    const { fileName, mimeType, fileData } = req.body;
+    const { fileName, mimeType, fileData, folderName } = req.body;
     if (!fileName || !mimeType || !fileData) {
       return res.status(400).json({ error: 'Missing fileName, mimeType, or fileData' });
     }
@@ -431,8 +503,8 @@ app.post('/api/drive/upload', async (req, res) => {
     oauth2Client.setCredentials({ access_token: accessToken });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
-    // Ensure dedicated folder exists: "GovRecords_Attachments"
-    let folderId = '';
+    // Ensure dedicated root folder exists: "GovRecords_Attachments"
+    let rootFolderId = '';
     try {
       const folderResponse = await drive.files.list({
         q: "name = 'GovRecords_Attachments' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
@@ -441,7 +513,7 @@ app.post('/api/drive/upload', async (req, res) => {
       });
 
       if (folderResponse.data.files && folderResponse.data.files.length > 0) {
-        folderId = folderResponse.data.files[0].id!;
+        rootFolderId = folderResponse.data.files[0].id!;
       } else {
         const createFolderResponse = await drive.files.create({
           requestBody: {
@@ -450,10 +522,39 @@ app.post('/api/drive/upload', async (req, res) => {
           },
           fields: 'id',
         });
-        folderId = createFolderResponse.data.id!;
+        rootFolderId = createFolderResponse.data.id!;
       }
     } catch (err) {
-      console.warn('Error finding/creating folder, defaulting to root:', err);
+      console.warn('Error finding/creating root folder:', err);
+    }
+
+    let finalFolderId = rootFolderId;
+
+    // If folderName is provided, create a subfolder inside root folder
+    if (folderName && rootFolderId) {
+      try {
+        const subFolderResponse = await drive.files.list({
+          q: `name = '${folderName.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+          fields: 'files(id)',
+          spaces: 'drive',
+        });
+
+        if (subFolderResponse.data.files && subFolderResponse.data.files.length > 0) {
+          finalFolderId = subFolderResponse.data.files[0].id!;
+        } else {
+          const createSubFolderResponse = await drive.files.create({
+            requestBody: {
+              name: folderName,
+              mimeType: 'application/vnd.google-apps.folder',
+              parents: [rootFolderId],
+            },
+            fields: 'id',
+          });
+          finalFolderId = createSubFolderResponse.data.id!;
+        }
+      } catch (err) {
+        console.warn(`Error finding/creating subfolder '${folderName}':`, err);
+      }
     }
 
     // Extract base64 data
@@ -466,8 +567,8 @@ app.post('/api/drive/upload', async (req, res) => {
       name: fileName,
     };
     
-    if (folderId) {
-      fileMetadata.parents = [folderId];
+    if (finalFolderId) {
+      fileMetadata.parents = [finalFolderId];
     }
 
     const media = {
@@ -647,6 +748,7 @@ app.post('/api/employees', async (req, res) => {
     }
 
     res.json({ success: true });
+    syncDrizzleToFirestore();
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to save employee' });
@@ -659,6 +761,7 @@ app.delete('/api/employees/:id', async (req, res) => {
     await db.delete(employees).where(eq(employees.originalId, id));
 
     res.json({ success: true });
+    syncDrizzleToFirestore();
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete employee' });
   }
@@ -670,6 +773,7 @@ app.post('/api/employees/clear-all', async (req, res) => {
     await db.delete(employees).where(eq(employees.userId, dummyUser.id));
 
     res.json({ success: true });
+    syncDrizzleToFirestore();
   } catch (error) {
     console.error('Failed to clear all data:', error);
     res.status(500).json({ error: 'Failed to clear all data' });

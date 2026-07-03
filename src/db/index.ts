@@ -43,7 +43,18 @@ if (useFallbackMode) {
   console.log('[DB] No SQL_HOST environment variable set. Using local JSON database (local_db.json) fallback.');
 }
 
-const LOCAL_DB_PATH = path.join(process.cwd(), 'local_db.json');
+const IS_VERCEL = !!process.env.VERCEL;
+const LOCAL_DB_PATH = IS_VERCEL 
+  ? path.join('/tmp', 'local_db.json') 
+  : path.join(process.cwd(), 'local_db.json');
+
+export function isFallbackActive() {
+  return useFallbackMode;
+}
+
+export function getLocalDbPath() {
+  return LOCAL_DB_PATH;
+}
 
 async function readLocalJsonDb() {
   try {

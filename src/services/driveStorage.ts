@@ -93,7 +93,8 @@ export const driveLogout = async () => {
 export const uploadFileToDrive = async (
   fileBlob: Blob,
   fileName: string,
-  mimeType: string
+  mimeType: string,
+  folderName?: string
 ): Promise<{ success: boolean; id: string; name: string; webViewLink?: string; webContentLink?: string }> => {
   const token = await getDriveAccessToken();
   if (!token) throw new Error('Not authenticated with Google Drive');
@@ -115,7 +116,8 @@ export const uploadFileToDrive = async (
     body: JSON.stringify({
       fileName,
       mimeType,
-      fileData: dataUrl
+      fileData: dataUrl,
+      folderName
     })
   });
 

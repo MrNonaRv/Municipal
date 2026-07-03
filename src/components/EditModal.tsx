@@ -118,13 +118,10 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
           const sanitizedDoc = docName.trim().replace(/[^a-zA-Z0-9]/g, '_');
           const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
 
+          const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
           try {
             let driveResult;
-            if (storageProvider === 'gdrive') {
-              driveResult = await uploadFileToDrive(file, autoFileName, file.type);
-            } else {
-              driveResult = await uploadFileToDrive(file, autoFileName, file.type);
-            }
+            driveResult = await uploadFileToDrive(file, autoFileName, file.type, folderName);
 
             const newAttachment: Attachment = {
               id: 'drive-' + driveResult.id,
@@ -190,16 +187,14 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     // Standardized Auto-named format
     const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
 
+    const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
+
     if (dest === 'drive') {
       setIsUploadingToDrive(true);
       setError(null);
       try {
         let driveResult;
-        if (provider === 'gdrive') {
-          driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
-        } else {
-          driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
-        }
+        driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type, folderName);
 
         const newAttachment: Attachment = {
           id: 'drive-' + driveResult.id,
@@ -373,15 +368,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
         const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
 
+        const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
         let newAttachment: Attachment;
 
         if (dest === 'drive') {
           let driveResult;
-          if (provider === 'gdrive') {
-            driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
-          } else {
-            driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type);
-          }
+          driveResult = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type, folderName);
           newAttachment = {
             id: 'drive-' + driveResult.id,
             name: newDocName.trim(),
