@@ -5,10 +5,11 @@ import { fileToBase64 } from '../utils/helpers';
 import { convertImageToPDF } from '../utils/pdfHelpers';
 import { Camera, Plus, Trash2, X, User, Users, GraduationCap, Briefcase, Save, ArrowLeft, FileText, FileUp, Download, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getAccessToken, uploadFileToSupabase as uploadFileToDrive, downloadFileFromSupabase as downloadFileFromDrive } from '../services/supabaseStorage';
-import { getDriveAccessToken, uploadFileToDrive as uploadFileToGDrive, downloadFileFromDrive as downloadFileFromGDrive } from '../services/driveStorage';
+import { uploadFileToSupabase as uploadFileToDrive, downloadFileFromSupabase as downloadFileFromDrive } from '../services/supabaseStorage';
+import { uploadFileToDrive as uploadFileToGDrive, downloadFileFromDrive as downloadFileFromGDrive } from '../services/driveStorage';
 import { isOnline } from '../services/db';
 import { syncAttachment } from '../services/attachmentSyncService';
+import { useStoragePersistence } from '../hooks/useStoragePersistence';
 
 const DOCUMENT_TYPES = [
   { value: 'Birth_Certificate', label: 'Birth Certificate' },
@@ -41,11 +42,11 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const isInitialMount = useRef(true);
 
-  // States for Storage Integration in EditModal
-  const [isDriveConnected, setIsDriveConnected] = useState(false);
+  // Persistence Layer
+  const { isDriveConnected, storageProvider } = useStoragePersistence();
+  
   const [isUploadingToDrive, setIsUploadingToDrive] = useState(false);
   const [uploadDestination, setUploadDestination] = useState<'local' | 'drive'>('local');
-  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
 
   // States for Scanned Documents Attachment
@@ -55,33 +56,19 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
   const [syncQueue, setSyncQueue] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Check Storage connection status and online status to auto-detect destination
+  // Online status to auto-detect destination
   useEffect(() => {
-    const updateDest = async () => {
-      const supabaseToken = await getAccessToken();
-      const driveToken = await getDriveAccessToken();
-      
-      const isSupabaseConnected = !!supabaseToken;
-      const isGDriveConnected = !!driveToken;
-      
-      setIsDriveConnected(isSupabaseConnected || isGDriveConnected);
-      
+    const updateDest = () => {
       const online = isOnline() && navigator.onLine;
       
-      if (isGDriveConnected && online) {
+      if (isDriveConnected && online) {
         setUploadDestination('drive');
-        setStorageProvider('gdrive');
-      } else if (isSupabaseConnected && online) {
-        setUploadDestination('drive');
-        setStorageProvider('supabase');
       } else {
         setUploadDestination('local');
-        setStorageProvider(null);
       }
     };
     
     updateDest();
-    
     window.addEventListener('online', updateDest);
     window.addEventListener('offline', updateDest);
     
@@ -89,7 +76,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       window.removeEventListener('online', updateDest);
       window.removeEventListener('offline', updateDest);
     };
-  }, [activeTab]);
+  }, [isDriveConnected]);
 
   // Background Attachment Sync Service
   useEffect(() => {
@@ -157,46 +144,75 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
       
       try {
         setError(null);
-        if (file.type.startsWith('image/')) {
-          try {
-            file = await convertImageToPDF(file, file.name);
-          } catch (pdfErr) {
-            console.warn("Failed to convert image to PDF, using original image file directly", pdfErr);
-          }
-        }
+        setSelectedFile(file);
         
         const base64 = await fileToBase64(file);
+        setSelectedFileData(base64);
         
-        // Auto-determine name
-        const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-        
-        const ext = file.name.split('.').pop() || 'png';
-        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedDoc = baseName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
-
-        const newAttachment: Attachment = {
-          id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-          name: baseName.trim(),
-          fileName: autoFileName,
-          fileType: file.type,
-          fileData: base64,
-          uploadedAt: new Date().toISOString()
-        };
-
-        setFormData(prev => ({
-          ...prev,
-          attachments: [...(prev.attachments || []), newAttachment]
-        }));
-
-        // Reset file input
-        if (fileInputRef.current) fileInputRef.current.value = '';
-        
+        // Auto-suggest document name if not set
+        if (!newDocName) {
+          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          setNewDocName(baseName.trim());
+        }
       } catch (err: any) {
         console.error("File loading failed", err);
         setError("File loading failed: " + (err instanceof Error ? err.message : String(err)));
       }
+    }
+  };
+
+  const handleAddAttachment = async () => {
+    if (!selectedFile || !newDocName.trim()) return;
+
+    try {
+      setIsUploadingToDrive(true);
+      setError(null);
+
+      let fileToProcess = selectedFile;
+      let fileDataToProcess = selectedFileData || '';
+
+      // Convert image to PDF if needed
+      if (fileToProcess.type.startsWith('image/')) {
+        try {
+          const pdfBlob = await convertImageToPDF(fileToProcess, fileToProcess.name);
+          fileToProcess = new File([pdfBlob], fileToProcess.name.replace(/\.[^/.]+$/, "") + ".pdf", { type: 'application/pdf' });
+          fileDataToProcess = await fileToBase64(fileToProcess);
+        } catch (pdfErr) {
+          console.warn("Failed to convert image to PDF, using original image", pdfErr);
+        }
+      }
+
+      const ext = fileToProcess.name.split('.').pop() || 'pdf';
+      const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+      const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+      const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
+
+      const newAttachment: Attachment = {
+        id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+        name: newDocName.trim(),
+        fileName: autoFileName,
+        fileType: fileToProcess.type,
+        fileData: fileDataToProcess,
+        uploadedAt: new Date().toISOString()
+      };
+
+      setFormData(prev => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), newAttachment]
+      }));
+
+      // Reset selection state
+      setSelectedFile(null);
+      setSelectedFileData(null);
+      setNewDocName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+
+    } catch (err: any) {
+      console.error("Failed to add attachment:", err);
+      setError("Failed to add attachment: " + err.message);
+    } finally {
+      setIsUploadingToDrive(false);
     }
   };
 
@@ -554,47 +570,120 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       </h3>
                       
                       <div className="space-y-4">
-                        {/* Automated Background Sync UI */}
-                        <div className="grid grid-cols-1 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Fast Attachment / Auto-Sync</label>
-                            <div className="flex flex-col gap-2">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Type / Name</label>
+                            <div className="relative">
+                              <select
+                                value={DOCUMENT_TYPES.some(t => t.label === newDocName) ? DOCUMENT_TYPES.find(t => t.label === newDocName)?.value : 'Other'}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  if (val !== 'Other') {
+                                    setNewDocName(DOCUMENT_TYPES.find(t => t.value === val)?.label || '');
+                                  }
+                                }}
+                                className="w-full border border-slate-200 rounded-lg pl-3 pr-10 py-2.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:border-transparent transition-all bg-white appearance-none"
+                              >
+                                {DOCUMENT_TYPES.map(type => (
+                                  <option key={type.value} value={type.value}>{type.label}</option>
+                                ))}
+                              </select>
+                              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <Plus size={14} className="rotate-45" />
+                              </div>
+                            </div>
+                            <input
+                              type="text"
+                              placeholder="Or type custom document name..."
+                              value={newDocName}
+                              onChange={(e) => setNewDocName(e.target.value)}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-xs focus:ring-1 focus:ring-indigo-500 focus:border-transparent transition-all bg-white"
+                            />
+                          </div>
+
+                          <div className="space-y-2">
+                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Select Scanned File (PDF/IMG)</label>
+                            <div className="flex gap-2">
                               <input
                                 type="file"
                                 accept="image/*,application/pdf"
                                 onChange={handleAttachmentFileChange}
                                 ref={fileInputRef}
                                 className="hidden"
-                                multiple
                               />
                               <button
                                 type="button"
                                 onClick={() => fileInputRef.current?.click()}
-                                className="w-full px-4 py-8 border-2 border-dashed border-slate-300 rounded-xl hover:border-indigo-400 hover:bg-indigo-50/30 transition-all text-xs text-slate-500 hover:text-slate-700 flex flex-col items-center justify-center gap-3 bg-white shadow-sm group"
+                                className={`flex-1 px-4 py-2.5 border-2 border-dashed rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+                                  selectedFile 
+                                    ? 'border-emerald-500 bg-emerald-50 text-emerald-700' 
+                                    : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                                }`}
                               >
-                                <div className="p-3 bg-slate-50 rounded-full group-hover:bg-indigo-100 transition-colors">
-                                  <FileUp size={24} className="text-slate-400 group-hover:text-indigo-600" />
-                                </div>
-                                <div className="text-center">
-                                  <p className="font-bold text-slate-700">Drop files here or click to upload</p>
-                                  <p className="text-[10px] text-slate-400 mt-1">PDF or Images (Auto-converted to PDF)</p>
-                                </div>
+                                {selectedFile ? <FileText size={16} /> : <FileUp size={16} />}
+                                {selectedFile ? selectedFile.name : 'Choose File'}
                               </button>
+                              {selectedFile && (
+                                <button
+                                  type="button"
+                                  onClick={() => { setSelectedFile(null); setSelectedFileData(null); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                                  className="p-2.5 text-red-500 hover:bg-red-50 rounded-lg transition-colors border border-red-100"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         </div>
 
-                        {/* Sync Status Overlay */}
-                        {syncQueue.length > 0 && (
-                          <div className="flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl animate-pulse">
-                            <Loader2 size={16} className="animate-spin text-indigo-600" />
-                            <div className="flex-1">
-                              <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Background Sync Active</p>
-                              <p className="text-[9px] text-indigo-500 italic">Pushing {syncQueue.length} files to Cloud Storage...</p>
+                        {/* File Naming Preview Box */}
+                        {selectedFile && (
+                          <div className="bg-slate-100/80 border border-slate-200 rounded-xl p-3 mt-2 text-xs">
+                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">✨ Automatic Standardized Filename Preview:</span>
+                            <div className="font-mono text-[10px] text-indigo-600 font-bold break-all flex items-center gap-1.5 bg-white p-2 rounded-lg border border-slate-200">
+                              <FileText size={12} className="text-indigo-500 shrink-0" />
+                              {(() => {
+                                const ext = selectedFile.name.split('.').pop() || 'png';
+                                const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+                                const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+                                const sanitizedDoc = (newDocName || 'Doc').trim().replace(/[^a-zA-Z0-9]/g, '_');
+                                return `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_[timestamp].${ext}`;
+                              })()}
                             </div>
                           </div>
                         )}
                       </div>
+
+                      <div className="mt-4 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={handleAddAttachment}
+                          disabled={isUploadingToDrive || !newDocName.trim() || !selectedFile || (uploadDestination === 'local' && !selectedFileData)}
+                          className="px-6 py-2 bg-[var(--gold)] text-[var(--navy)] text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-opacity-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
+                        >
+                          {isUploadingToDrive ? (
+                            <>
+                              <Loader2 size={14} className="animate-spin" />
+                              Uploading to Drive...
+                            </>
+                          ) : (
+                            <>
+                              <Plus size={14} /> Add Document
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Sync Status Overlay */}
+                      {syncQueue.length > 0 && (
+                        <div className="mt-4 flex items-center gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl animate-pulse">
+                          <Loader2 size={16} className="animate-spin text-indigo-600" />
+                          <div className="flex-1">
+                            <p className="text-[10px] font-black uppercase text-indigo-600 tracking-widest">Background Sync Active</p>
+                            <p className="text-[9px] text-indigo-500 italic">Pushing {syncQueue.length} files to Cloud Storage...</p>
+                          </div>
+                        </div>
+                      )}
 
                       {!isDriveConnected && (
                         <p className="mt-3 text-[9px] text-amber-500 italic">💡 Connect Cloud Storage in the Data Center to enable automated cloud storage with automatic file naming.</p>

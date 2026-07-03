@@ -819,8 +819,14 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                       </div>
                       <p>{error}</p>
                       {error.includes('unauthorized-domain') && (
-                        <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
-                          <strong>Action Required:</strong> You must add <code>{window.location.hostname}</code> to the <strong>Authorized domains</strong> list in your <a href={`https://console.firebase.google.com/u/0/project/hr-main-datastorage-mam/authentication/settings`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a>.
+                        <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600 space-y-2">
+                          <p><strong>Action Required:</strong> You must add <code>{window.location.hostname}</code> to the <strong>Authorized domains</strong> list in your <a href={`https://console.firebase.google.com/u/0/project/hr-main-datastorage-mam/authentication/settings`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline font-bold">Firebase Console</a>.</p>
+                          <div className="p-2 bg-slate-50 border rounded text-[8px] font-mono">
+                            1. Go to Firebase Console → Auth → Settings<br/>
+                            2. Click "Authorized domains"<br/>
+                            3. Click "Add domain"<br/>
+                            4. Enter: <strong>{window.location.hostname}</strong>
+                          </div>
                         </div>
                       )}
                       {error.includes('not-found') || error.includes('NOT_FOUND') && (

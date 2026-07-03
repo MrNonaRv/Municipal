@@ -12,8 +12,7 @@ import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getAccessToken, initAuth } from './services/supabaseStorage';
-import { getDriveAccessToken, initDriveAuth } from './services/driveStorage';
+import { useStoragePersistence } from './hooks/useStoragePersistence';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -24,11 +23,17 @@ export default function App() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Storage states
-  const [isDriveConnected, setIsDriveConnected] = useState(false);
-  const [driveUser, setDriveUser] = useState<any>(null);
+  // Storage and Persistence Layer
+  const { 
+    isDriveConnected, 
+    driveUser, 
+    storageProvider, 
+    setDriveUser, 
+    setIsDriveConnected, 
+    setStorageProvider 
+  } = useStoragePersistence();
+
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
-  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(null);
 
   // Offline Sync States
   const [workMode, setWorkModeState] = useState<WorkMode>(getWorkMode());
