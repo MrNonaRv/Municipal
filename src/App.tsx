@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Employee } from './types/employee';
-import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll, addActivityLog } from './services/db';
+import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll, addActivityLog, getIsSyncing } from './services/db';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
 import ProfileModal from './components/ProfileModal';
@@ -25,10 +25,38 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   // Storage states
-  const [isDriveConnected, setIsDriveConnected] = useState(false);
-  const [driveUser, setDriveUser] = useState<any>(null);
+  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(
+    localStorage.getItem('gers_storage_provider') as 'supabase' | 'gdrive' | null
+  );
+
+  const [isDriveConnected, setIsDriveConnected] = useState(() => {
+    const hasToken = !!localStorage.getItem('google_drive_access_token');
+    const hasSupabaseUser = !!localStorage.getItem('gers_supabase_user');
+    return !!storageProvider && (hasToken || hasSupabaseUser);
+  });
+
+  const [driveUser, setDriveUser] = useState<any>(() => {
+    const provider = localStorage.getItem('gers_storage_provider');
+    if (provider === 'gdrive') {
+      const saved = localStorage.getItem('gers_drive_user');
+      return saved ? JSON.parse(saved) : null;
+    } else if (provider === 'supabase') {
+      const saved = localStorage.getItem('gers_supabase_user');
+      return saved ? JSON.parse(saved) : null;
+    }
+    return null;
+  });
+
   const [isDriveConnecting, setIsDriveConnecting] = useState(false);
-  const [storageProvider, setStorageProvider] = useState<'supabase' | 'gdrive' | null>(null);
+
+  const updateStorageProvider = (provider: 'supabase' | 'gdrive' | null) => {
+    setStorageProvider(provider);
+    if (provider) {
+      localStorage.setItem('gers_storage_provider', provider);
+    } else {
+      localStorage.removeItem('gers_storage_provider');
+    }
+  };
 
   // Offline Sync States
   const [workMode, setWorkModeState] = useState<WorkMode>(getWorkMode());
@@ -46,6 +74,27 @@ export default function App() {
 
   const { toasts, addToast, removeToast } = useToast();
 
+  const triggerSync = () => {
+    if (getWorkMode() === 'local') return;
+    syncOfflineData((status, pendingCount, retryData) => {
+      setSyncQueueCount(pendingCount);
+      if (status === 'syncing') {
+        setIsSyncingState(true);
+      } else if (status === 'success') {
+        setIsSyncingState(false);
+        addToast('All local changes synchronized with server!', 'success');
+        loadEmployees();
+      } else if (status === 'retrying') {
+        setIsSyncingState(true);
+        const delaySecs = (retryData?.nextRetryDelay || 2000) / 1000;
+        addToast(`Sync failed. Retrying in ${delaySecs}s (Attempt ${retryData?.attempt}/5)...`, 'info');
+      } else if (status === 'error') {
+        setIsSyncingState(false);
+        addToast(`Failed to sync some changes (${pendingCount} pending).`, 'error');
+      }
+    });
+  };
+
   useEffect(() => {
     loadEmployees();
 
@@ -53,14 +102,20 @@ export default function App() {
     getAccessToken().then(token => {
       if (token) {
         setIsDriveConnected(true);
-        setStorageProvider('supabase');
+        // Only set as provider if none is already set or if it matches the preference
+        if (!storageProvider || storageProvider === 'supabase') {
+          updateStorageProvider('supabase');
+        }
       }
     });
 
     getDriveAccessToken().then(token => {
       if (token) {
         setIsDriveConnected(true);
-        setStorageProvider('gdrive');
+        // Only set as provider if none is already set or if it matches the preference
+        if (!storageProvider || storageProvider === 'gdrive') {
+          updateStorageProvider('gdrive');
+        }
       }
     });
 
@@ -68,13 +123,14 @@ export default function App() {
       (user, token) => {
         setIsDriveConnected(true);
         setDriveUser(user);
-        setStorageProvider('supabase');
+        updateStorageProvider('supabase');
       },
       () => {
-        if (storageProvider === 'supabase') {
+        // Only reset if this was the active provider
+        if (localStorage.getItem('gers_storage_provider') === 'supabase') {
           setIsDriveConnected(false);
           setDriveUser(null);
-          setStorageProvider(null);
+          updateStorageProvider(null);
         }
       }
     );
@@ -83,13 +139,14 @@ export default function App() {
       (user, token) => {
         setIsDriveConnected(true);
         setDriveUser(user);
-        setStorageProvider('gdrive');
+        updateStorageProvider('gdrive');
       },
       () => {
-        if (storageProvider === 'gdrive') {
+        // Only reset if this was the active provider
+        if (localStorage.getItem('gers_storage_provider') === 'gdrive') {
           setIsDriveConnected(false);
           setDriveUser(null);
-          setStorageProvider(null);
+          updateStorageProvider(null);
         }
       }
     );
@@ -98,11 +155,12 @@ export default function App() {
     const handleDriveStatusChanged = (e: any) => {
       setIsDriveConnected(e.detail.connected);
       if (e.detail.connected) {
-        setStorageProvider(e.detail.provider || 'supabase');
+        const newProvider = e.detail.provider || 'supabase';
+        updateStorageProvider(newProvider);
         setDriveUser(e.detail.user || { email: e.detail.email });
       } else {
         setDriveUser(null);
-        setStorageProvider(null);
+        updateStorageProvider(null);
       }
     };
     window.addEventListener('gers_drive_status_changed', handleDriveStatusChanged);
@@ -111,7 +169,7 @@ export default function App() {
     const updateOnlineStatus = async () => {
       const online = navigator.onLine;
       const reachable = await checkServerConnection();
-      setIsOnlineState(online);
+      setIsOnlineState(isOnline());
       
       const mode = getWorkMode();
       if (mode !== 'local') {
@@ -124,27 +182,6 @@ export default function App() {
           addToast('Network connection lost. Saving changes locally.', 'info');
         }
       }
-    };
-
-    const triggerSync = () => {
-      if (getWorkMode() === 'local') return;
-      syncOfflineData((status, pendingCount, retryData) => {
-        setSyncQueueCount(pendingCount);
-        if (status === 'syncing') {
-          setIsSyncingState(true);
-        } else if (status === 'success') {
-          setIsSyncingState(false);
-          addToast('All local changes synchronized with server!', 'success');
-          loadEmployees();
-        } else if (status === 'retrying') {
-          setIsSyncingState(true);
-          const delaySecs = (retryData?.nextRetryDelay || 2000) / 1000;
-          addToast(`Sync failed. Retrying in ${delaySecs}s (Attempt ${retryData?.attempt}/5)...`, 'info');
-        } else if (status === 'error') {
-          setIsSyncingState(false);
-          addToast(`Failed to sync some changes (${pendingCount} pending).`, 'error');
-        }
-      });
     };
 
     const handleSyncStatusChange = () => {
@@ -177,7 +214,7 @@ export default function App() {
     };
 
     const handleReachabilityChange = (e: any) => {
-      setIsOnlineState(navigator.onLine);
+      setIsOnlineState(isOnline());
     };
 
     window.addEventListener('online', updateOnlineStatus);
@@ -192,14 +229,20 @@ export default function App() {
     const checkServerInterval = setInterval(async () => {
       const mode = getWorkMode();
       if (mode !== 'local') {
-        const isCurrentlyOnline = navigator.onLine;
         const wasReachable = getServerReachable();
         const nowReachable = await checkServerConnection();
-        setIsOnlineState(isCurrentlyOnline);
+        setIsOnlineState(isOnline());
 
         if (mode === 'auto') {
-          if (isCurrentlyOnline && nowReachable && !wasReachable) {
+          const pendingItems = getSyncQueue().length;
+          const syncing = getIsSyncing();
+
+          if (nowReachable && !wasReachable) {
             addToast('Government server connection restored. Synchronizing...', 'success');
+            triggerSync();
+          } else if (nowReachable && pendingItems > 0 && !syncing) {
+            // Proactively trigger sync if reachable and items are pending but no sync is active
+            console.log('[checkServerInterval] Reachable with pending items. Triggering proactive sync.');
             triggerSync();
           }
         }
@@ -340,10 +383,19 @@ export default function App() {
 
                 {/* Sync Queue status badge */}
                 {syncQueueCount > 0 && (
-                  <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title={`${syncQueueCount} changes saved locally, waiting to sync`}>
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      addToast('Manually triggering synchronization...', 'info');
+                      triggerSync();
+                    }}
+                    disabled={isSyncingState}
+                    className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0 transition-all hover:bg-amber-500/20 active:scale-95 disabled:opacity-50" 
+                    title={`${syncQueueCount} changes saved locally. Click to force sync now.`}
+                  >
                     <RefreshCw size={10} className={`text-amber-400 ${isSyncingState ? 'animate-spin' : ''}`} />
                     {syncQueueCount} Pending Sync
-                  </span>
+                  </button>
                 )}
               </h1>
               <p className="text-[10px] sm:text-xs text-slate-400 uppercase tracking-widest font-medium">Administrative Management Portal</p>

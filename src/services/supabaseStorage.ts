@@ -44,12 +44,18 @@ export const checkSupabaseStatus = async (): Promise<SupabaseStatus> => {
     if (res.ok) {
       const data: SupabaseStatus = await res.json();
       notifyListeners(data);
+      if (data.connected) {
+        localStorage.setItem('gers_supabase_user', JSON.stringify({ email: 'linked-bucket@supabase' }));
+      } else {
+        localStorage.removeItem('gers_supabase_user');
+      }
       return data;
     }
   } catch (err) {
     console.error('Failed to fetch Supabase status:', err);
   }
   const fallback = { connected: false };
+  localStorage.removeItem('gers_supabase_user');
   notifyListeners(fallback);
   return fallback;
 };
@@ -94,6 +100,7 @@ export const logout = async () => {
   try {
     const res = await fetch('/api/supabase/disconnect', { method: 'POST' });
     if (res.ok) {
+      localStorage.removeItem('gers_supabase_user');
       notifyListeners({ connected: false });
     } else {
       throw new Error('Failed to disconnect Supabase');

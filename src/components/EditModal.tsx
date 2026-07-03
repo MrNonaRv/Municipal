@@ -110,9 +110,62 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         setSelectedFileData(base64);
 
         // Auto-populate document name if empty
-        if (!newDocName.trim()) {
-          const baseName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-          setNewDocName(baseName);
+        let docName = newDocName;
+        if (!docName.trim()) {
+          docName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+          setNewDocName(docName);
+        }
+
+        // AUTO-SYNC LOGIC: If drive is connected and online, push immediately
+        if (uploadDestination === 'drive') {
+          setIsUploadingToDrive(true);
+          const ext = file.name.split('.').pop() || 'png';
+          const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+          const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+          const sanitizedDoc = docName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+          const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
+
+          try {
+            let driveResult;
+            if (storageProvider === 'gdrive') {
+              driveResult = await uploadFileToGDrive(file, autoFileName, file.type);
+            } else {
+              driveResult = await uploadFileToDrive(file, autoFileName, file.type);
+            }
+
+            const newAttachment: Attachment = {
+              id: 'drive-' + driveResult.id,
+              name: docName.trim(),
+              fileName: driveResult.name,
+              fileType: file.type,
+              fileData: '', 
+              uploadedAt: new Date().toISOString(),
+              driveFileId: driveResult.id,
+              driveWebViewLink: driveResult.webViewLink,
+              driveWebContentLink: driveResult.webContentLink,
+              storageProvider: storageProvider as 'supabase' | 'gdrive'
+            };
+
+            const updatedFormData = {
+              ...formData,
+              attachments: [...(formData.attachments || []), newAttachment]
+            };
+            setFormData(updatedFormData);
+            
+            // Trigger immediate save for background sync to prevent loss on reload
+            onSave(updatedFormData, true);
+
+            // Reset inputs
+            setNewDocName('');
+            setSelectedFile(null);
+            setSelectedFileData(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+          } catch (uploadErr: any) {
+            console.error("Auto background sync failed", uploadErr);
+            setError(`Background sync failed: ${uploadErr.message || uploadErr}. You can try adding manually.`);
+          } finally {
+            setIsUploadingToDrive(false);
+          }
         }
       } catch (err: any) {
         console.error("File loading failed", err);
@@ -696,7 +749,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                           <div className={`w-1.5 h-1.5 rounded-full ${isDriveConnected && uploadDestination === 'drive' ? 'bg-indigo-500 animate-pulse' : 'bg-amber-500'}`} />
                           {isDriveConnected && uploadDestination === 'drive' ? (
                             <span className="flex items-center gap-1">
-                              System auto-detected connection. Saving directly to <strong className="text-indigo-600 font-semibold">{storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}</strong>.
+                              <strong>Background Sync Active:</strong> Newly selected files are pushed directly to <strong className="text-indigo-600 font-semibold">{storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}</strong>.
                             </span>
                           ) : (
                             <span className="flex items-center gap-1">
@@ -727,7 +780,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                         <p className="mt-3 text-[9px] text-amber-500 italic">💡 Connect Cloud Storage in the Data Center to enable automated cloud storage with automatic file naming.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'drive' && (
-                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ File will be automatically named and uploaded directly to your {storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'}.</p>
+                        <p className="mt-3 text-[9px] text-indigo-500 italic">✨ <strong>Sync Service:</strong> Files are automatically pushed to your {storageProvider === 'gdrive' ? 'Google Drive' : 'Supabase Storage'} upon selection.</p>
                       )}
                       {isDriveConnected && uploadDestination === 'local' && (
                         <p className="mt-3 text-[9px] text-amber-500 italic">⚠️ Offline mode detected. File will be automatically saved locally and synchronized online later.</p>

@@ -639,16 +639,45 @@ app.post('/api/drive/upload', async (req, res) => {
     oauth2Client.setCredentials({ access_token: accessToken });
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
+    // Ensure dedicated folder exists: "GovRecords_Attachments"
+    let folderId = '';
+    try {
+      const folderResponse = await drive.files.list({
+        q: "name = 'GovRecords_Attachments' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
+        fields: 'files(id)',
+        spaces: 'drive',
+      });
+
+      if (folderResponse.data.files && folderResponse.data.files.length > 0) {
+        folderId = folderResponse.data.files[0].id!;
+      } else {
+        const createFolderResponse = await drive.files.create({
+          requestBody: {
+            name: 'GovRecords_Attachments',
+            mimeType: 'application/vnd.google-apps.folder',
+          },
+          fields: 'id',
+        });
+        folderId = createFolderResponse.data.id!;
+      }
+    } catch (err) {
+      console.warn('Error finding/creating folder, defaulting to root:', err);
+    }
+
     // Extract base64 data
     const base64Data = fileData.split(';base64,').pop();
     const buffer = Buffer.from(base64Data, 'base64');
     const bufferStream = new (require('stream').PassThrough)();
     bufferStream.end(buffer);
 
-    const fileMetadata = {
+    const fileMetadata: any = {
       name: fileName,
-      // You can specify a folder ID here if you want to group uploads
     };
+    
+    if (folderId) {
+      fileMetadata.parents = [folderId];
+    }
+
     const media = {
       mimeType: mimeType,
       body: bufferStream,
@@ -657,12 +686,13 @@ app.post('/api/drive/upload', async (req, res) => {
     const response = await drive.files.create({
       requestBody: fileMetadata,
       media: media,
-      fields: 'id, webViewLink, webContentLink',
+      fields: 'id, name, webViewLink, webContentLink',
     });
 
     res.json({
       success: true,
-      fileId: response.data.id,
+      id: response.data.id,
+      name: response.data.name,
       webViewLink: response.data.webViewLink,
       webContentLink: response.data.webContentLink,
     });

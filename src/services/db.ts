@@ -345,6 +345,8 @@ export const compareEmployeeChanges = (oldEmp: Employee | undefined, newEmp: Emp
 // Flag to prevent overlapping sync operations
 let isSyncing = false;
 
+export const getIsSyncing = (): boolean => isSyncing;
+
 let syncRetryCount = 0;
 let syncRetryTimeout: NodeJS.Timeout | null = null;
 const MAX_RETRY_COUNT = 5;
@@ -442,7 +444,14 @@ export const syncOfflineData = async (
           message: `Failed to sync item: ${item.type} for ${item.id}`,
           details: err.message
         });
-        if (mode === 'auto') {
+        
+        // Only drop connection if it's likely a network error, not a logic error
+        const isNetworkError = err.message?.includes('Failed to fetch') || 
+                               err.message?.includes('NetworkError') || 
+                               err.message?.includes('Aborted') ||
+                               err.message?.includes('timeout');
+                               
+        if (mode === 'auto' && isNetworkError) {
           connectionDropped = true;
           setServerReachable(false);
           console.warn('[syncOfflineData] Server connection dropped during sync. Marking server unreachable.');

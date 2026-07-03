@@ -9,7 +9,7 @@ const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
 provider.addScope('https://www.googleapis.com/auth/drive.file');
 
-let cachedAccessToken: string | null = null;
+let cachedAccessToken: string | null = localStorage.getItem('google_drive_access_token');
 let isSigningIn = false;
 
 export const initDriveAuth = (
@@ -19,6 +19,12 @@ export const initDriveAuth = (
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
+        localStorage.setItem('gers_drive_user', JSON.stringify({
+          uid: user.uid,
+          email: user.email,
+          displayName: user.displayName,
+          photoURL: user.photoURL
+        }));
         if (onAuthSuccess) onAuthSuccess(user, cachedAccessToken);
       } else if (!isSigningIn) {
         // Try to re-auth silently or wait for user to click sign in
@@ -26,6 +32,8 @@ export const initDriveAuth = (
       }
     } else {
       cachedAccessToken = null;
+      localStorage.removeItem('google_drive_access_token');
+      localStorage.removeItem('gers_drive_user');
       if (onAuthFailure) onAuthFailure();
     }
   });
@@ -42,6 +50,16 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     }
 
     cachedAccessToken = credential.accessToken;
+    localStorage.setItem('google_drive_access_token', cachedAccessToken);
+    
+    const userData = {
+      uid: result.user.uid,
+      email: result.user.email,
+      displayName: result.user.displayName,
+      photoURL: result.user.photoURL
+    };
+    localStorage.setItem('gers_drive_user', JSON.stringify(userData));
+    
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
     isSigningIn = false;
@@ -59,19 +77,24 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
 };
 
 export const getDriveAccessToken = async (): Promise<string | null> => {
+  if (!cachedAccessToken) {
+    cachedAccessToken = localStorage.getItem('google_drive_access_token');
+  }
   return cachedAccessToken;
 };
 
 export const driveLogout = async () => {
   await auth.signOut();
   cachedAccessToken = null;
+  localStorage.removeItem('google_drive_access_token');
+  localStorage.removeItem('gers_drive_user');
 };
 
 export const uploadFileToDrive = async (
   fileBlob: Blob,
   fileName: string,
   mimeType: string
-): Promise<{ success: boolean; fileId: string; webViewLink?: string; webContentLink?: string }> => {
+): Promise<{ success: boolean; id: string; name: string; webViewLink?: string; webContentLink?: string }> => {
   const token = await getDriveAccessToken();
   if (!token) throw new Error('Not authenticated with Google Drive');
 
@@ -101,7 +124,14 @@ export const uploadFileToDrive = async (
     throw new Error(error.error || 'Failed to upload to Google Drive');
   }
 
-  return await response.json();
+  const result = await response.json();
+  return {
+    success: true,
+    id: result.id,
+    name: result.name,
+    webViewLink: result.webViewLink,
+    webContentLink: result.webContentLink
+  };
 };
 
 export const downloadFileFromDrive = async (fileId: string): Promise<Blob> => {
