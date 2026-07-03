@@ -416,6 +416,12 @@ async function ensureDbLoaded() {
     await seedRealEmployeesIfNeeded();
     dbLoaded = true;
     console.log('[DB] Database system initialization complete.');
+
+    // If we are in AI Studio, ensure our local state is pushed to Firestore
+    if (!process.env.VERCEL) {
+      console.log('[DB] Running in AI Studio, triggering proactive sync to Firestore...');
+      await syncDrizzleToFirestore();
+    }
   } catch (err) {
     console.error('[DB] Critical error during database initialization:', err);
   } finally {
@@ -451,6 +457,35 @@ app.get('/api/health', async (req, res) => {
     env: process.env.VERCEL ? 'vercel' : 'standalone',
     uptime: process.uptime()
   });
+});
+
+app.get('/api/debug/db-status', async (req, res) => {
+  try {
+    const records = await db.select().from(employees);
+    const localDbPath = getLocalDbPath();
+    const stats = await fs.stat(localDbPath).catch(() => null);
+    
+    let firestoreStatus = 'not_initialized';
+    if (firestoreDb) {
+      const docSnap = await getDoc(doc(firestoreDb, 'system_sync', 'drizzle_local_db'));
+      firestoreStatus = docSnap.exists() ? 'exists' : 'missing';
+    }
+
+    res.json({
+      env: process.env.VERCEL ? 'vercel' : 'aistudio',
+      recordsCount: records.length,
+      localDbFile: {
+        path: localDbPath,
+        exists: !!stats,
+        size: stats?.size || 0,
+        mtime: stats?.mtime
+      },
+      firestore: firestoreStatus,
+      isFallback: isFallbackActive()
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/health', (req, res) => {
@@ -776,8 +811,8 @@ app.post('/api/employees', async (req, res) => {
       });
     }
 
-    res.json({ success: true });
     await syncDrizzleToFirestore();
+    res.json({ success: true });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to save employee' });
@@ -789,8 +824,8 @@ app.delete('/api/employees/:id', async (req, res) => {
     const id = req.params.id;
     await db.delete(employees).where(eq(employees.originalId, id));
 
-    res.json({ success: true });
     await syncDrizzleToFirestore();
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete employee' });
   }
@@ -801,8 +836,8 @@ app.post('/api/employees/clear-all', async (req, res) => {
     const dummyUser = await getDummyUser();
     await db.delete(employees).where(eq(employees.userId, dummyUser.id));
 
-    res.json({ success: true });
     await syncDrizzleToFirestore();
+    res.json({ success: true });
   } catch (error) {
     console.error('Failed to clear all data:', error);
     res.status(500).json({ error: 'Failed to clear all data' });
