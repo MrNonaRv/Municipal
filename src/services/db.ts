@@ -91,7 +91,39 @@ export interface SyncItem {
   type: 'PUT' | 'DELETE';
   data?: Employee;
   timestamp: number;
+  retryCount?: number;
+  lastError?: string;
 }
+
+const PARKED_KEY = 'gers_parked_sync_items';
+
+export const getParkedItems = (): SyncItem[] => {
+  try {
+    const raw = localStorage.getItem(PARKED_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return parsed;
+  } catch (e) {
+    console.error('[getParkedItems] Failed to parse parked items', e);
+    return [];
+  }
+};
+
+export const saveParkedItems = (items: SyncItem[]): void => {
+  try {
+    localStorage.setItem(PARKED_KEY, JSON.stringify(items));
+  } catch (e) {
+    console.error('[saveParkedItems] Failed to save parked items', e);
+  }
+};
+
+export const parkSyncItem = (item: SyncItem): void => {
+  console.log(`[parkSyncItem] Parking stuck item ID=${item.id}, Type=${item.type} due to repeated failures.`);
+  const items = getParkedItems();
+  if (!items.some(i => i.id === item.id && i.timestamp === item.timestamp)) {
+    items.push(item);
+    saveParkedItems(items);
+  }
+};
 
 // Helper to get local cache
 export const getLocalCache = (): Employee[] => {
@@ -355,7 +387,7 @@ export const getIsSyncing = (): boolean => {
     console.warn('[getIsSyncing] Sync appears stuck (active for >5m). Resetting.');
     isSyncing = false;
   }
-  return isSyncing;
+  return isSyncing || !!syncRetryTimeout;
 };
 
 let syncRetryCount = 0;
@@ -428,13 +460,39 @@ export const syncOfflineData = async (
         if (item.type === 'PUT') {
           if (!item.data) throw new Error('No data provided for PUT operation');
           console.log(`[syncOfflineData] Sending POST /api/employees for ID=${item.id}`);
-          const response = await fetch('/api/employees', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item.data)
-          });
-          console.log(`[syncOfflineData] POST response status: ${response.status} ${response.statusText}`);
-          if (!response.ok) throw new Error(`Server returned error status: ${response.status}`);
+          const payloadStr = JSON.stringify(item.data);
+          let response;
+          if (payloadStr.length > 500000) { // If larger than 500KB, use chunking
+            console.log(`[syncOfflineData] Payload is ${payloadStr.length} bytes, using chunked upload`);
+            const uploadId = item.id + '-' + Date.now();
+            const CHUNK_SIZE = 500000;
+            const totalChunks = Math.ceil(payloadStr.length / CHUNK_SIZE);
+            
+            for (let i = 0; i < totalChunks; i++) {
+              const chunkData = payloadStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+              response = await fetch('/api/employees/chunk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  uploadId,
+                  chunkIndex: i,
+                  totalChunks,
+                  data: chunkData
+                })
+              });
+              if (!response.ok) {
+                 throw new Error(`Server returned error status during chunk ${i}: ${response.status}`);
+              }
+            }
+          } else {
+            response = await fetch('/api/employees', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payloadStr
+            });
+            console.log(`[syncOfflineData] POST response status: ${response.status} ${response.statusText}`);
+            if (!response.ok) throw new Error(`Server returned error status: ${response.status}`);
+          }
         } else if (item.type === 'DELETE') {
           console.log(`[syncOfflineData] Sending DELETE /api/employees/${item.id}`);
           const response = await fetch(`/api/employees/${item.id}`, {
@@ -450,12 +508,29 @@ export const syncOfflineData = async (
         });
       } catch (err: any) {
         console.error(`[syncOfflineData] Failed to sync item ${item.id}:`, err);
-        failedItems.push(item);
-        addSyncHistoryEvent({
-          type: 'SYNC_ITEM_ERROR',
-          message: `Failed to sync item: ${item.type} for ${item.id}`,
-          details: err.message
-        });
+        
+        // Track retries per individual item
+        item.retryCount = (item.retryCount || 0) + 1;
+        item.lastError = err.message || String(err);
+        
+        if (item.retryCount >= 5) {
+          console.error(`[syncOfflineData] Item ${item.id} reached maximum individual retries (5). Parking it to prevent blocking.`);
+          parkSyncItem(item);
+          addSyncHistoryEvent({
+            type: 'SYNC_ITEM_ERROR',
+            message: `Permanently failed to sync item: ${item.type} for ${item.id} (Max retries reached). Item parked.`,
+            details: item.lastError
+          });
+          // Dispatch custom event to notify App.tsx to display a notification/toast about the parked item
+          window.dispatchEvent(new CustomEvent('gers_sync_parked_item', { detail: item }));
+        } else {
+          failedItems.push(item);
+          addSyncHistoryEvent({
+            type: 'SYNC_ITEM_ERROR',
+            message: `Failed to sync item (Attempt ${item.retryCount}/5): ${item.type} for ${item.id}`,
+            details: item.lastError
+          });
+        }
         
         // Only drop connection if it's likely a network error, not a logic error
         const isNetworkError = err.message?.includes('Failed to fetch') || 
@@ -627,12 +702,39 @@ export const dbPut = async (emp: Employee): Promise<void> => {
   }
 
   try {
-    console.log(`[dbPut] Sending POST /api/employees for ID=${emp.id}...`);
-    const response = await fetch('/api/employees', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(emp)
-    });
+    const payloadStr = JSON.stringify(emp);
+    let response;
+    if (payloadStr.length > 500000) { // If larger than 500KB, use chunking
+      console.log(`[dbPut] Payload is ${payloadStr.length} bytes, using chunked upload`);
+      const uploadId = emp.id + '-' + Date.now();
+      const CHUNK_SIZE = 500000;
+      const totalChunks = Math.ceil(payloadStr.length / CHUNK_SIZE);
+      
+      for (let i = 0; i < totalChunks; i++) {
+        const chunkData = payloadStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+        response = await fetch('/api/employees/chunk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uploadId,
+            chunkIndex: i,
+            totalChunks,
+            data: chunkData
+          })
+        });
+        if (!response.ok) {
+           throw new Error(`Server returned error status during chunk ${i}: ${response.status}`);
+        }
+      }
+    } else {
+      console.log(`[dbPut] Sending POST /api/employees for ID=${emp.id}...`);
+      response = await fetch('/api/employees', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payloadStr
+      });
+    }
+    
     console.log(`[dbPut] Response status: ${response.status} ${response.statusText}`);
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
     setServerReachable(true);

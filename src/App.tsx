@@ -200,6 +200,14 @@ export default function App() {
       setIsOnlineState(isOnline());
     };
 
+    const handleSyncParkedItem = (e: any) => {
+      const item = e.detail;
+      const empName = item.data 
+        ? `${item.data.firstName || ''} ${item.data.surname || ''}`.trim() 
+        : item.id;
+      addToast(`Sync failed repeatedly for employee "${empName || 'Unnamed'}". This record has been parked to prevent blocking subsequent sync operations.`, 'error');
+    };
+
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
     window.addEventListener('gers_sync_status_change', handleSyncStatusChange);
@@ -207,6 +215,7 @@ export default function App() {
     window.addEventListener('gers_work_mode_change', handleWorkModeChanged);
     window.addEventListener('gers_server_reachability_change', handleReachabilityChange);
     window.addEventListener('gers_trigger_sync', triggerSync);
+    window.addEventListener('gers_sync_parked_item', handleSyncParkedItem);
 
     // Periodic check to verify server reachability and trigger sync if back online
     const checkServerInterval = setInterval(async () => {
@@ -252,6 +261,7 @@ export default function App() {
       window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
       window.removeEventListener('gers_server_reachability_change', handleReachabilityChange);
       window.removeEventListener('gers_trigger_sync', triggerSync);
+      window.removeEventListener('gers_sync_parked_item', handleSyncParkedItem);
     };
   }, []);
 
