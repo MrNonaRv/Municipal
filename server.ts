@@ -124,9 +124,81 @@ async function initFirebase() {
   return false;
 }
 
+let sharedDriveConfig: { accessToken: string | null; user: any; storageProvider: string | null } | null = null;
+
+async function loadGDriveConfig() {
+  const GDRIVE_CONFIG_FILE = path.join(currentDirname, 'gdrive_config.json');
+  try {
+    // Try local file first
+    try {
+      const content = await fs.readFile(GDRIVE_CONFIG_FILE, 'utf-8');
+      sharedDriveConfig = JSON.parse(content);
+      console.log('[Google Drive Config] Loaded local configuration:', sharedDriveConfig?.user?.email);
+    } catch (e) {
+      // Local file not found or corrupted
+    }
+
+    // Try Firestore if available (Firestore is master)
+    if (firestoreDb) {
+      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        sharedDriveConfig = {
+          accessToken: data.accessToken || null,
+          user: data.user || null,
+          storageProvider: data.storageProvider || null
+        };
+        console.log('[Google Drive Config] Restored configuration from Firestore:', sharedDriveConfig?.user?.email);
+        // Sync back to local file
+        await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(sharedDriveConfig, null, 2), 'utf-8');
+      } else if (sharedDriveConfig) {
+        // If Firestore doc doesn't exist but local file does, seed Firestore
+        console.log('[Google Drive Config] Seeding Firestore with local configuration...');
+        await setDoc(docRef, sharedDriveConfig);
+      }
+    }
+  } catch (err) {
+    console.error('[Google Drive Config] Failed to load Google Drive config:', err);
+  }
+}
+
+async function saveGDriveConfig(config: any) {
+  const GDRIVE_CONFIG_FILE = path.join(currentDirname, 'gdrive_config.json');
+  sharedDriveConfig = config;
+  try {
+    await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+    if (firestoreDb) {
+      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
+      await setDoc(docRef, config);
+    }
+    console.log('[Google Drive Config] Saved shared configuration:', config?.user?.email);
+  } catch (err) {
+    console.error('[Google Drive Config] Failed to save Google Drive config:', err);
+  }
+}
+
+async function deleteGDriveConfig() {
+  const GDRIVE_CONFIG_FILE = path.join(currentDirname, 'gdrive_config.json');
+  sharedDriveConfig = null;
+  try {
+    try {
+      await fs.unlink(GDRIVE_CONFIG_FILE);
+    } catch (e) {}
+    if (firestoreDb) {
+      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
+      await deleteDoc(docRef);
+    }
+    console.log('[Google Drive Config] Deleted shared configuration');
+  } catch (err) {
+    console.error('[Google Drive Config] Failed to delete Google Drive config:', err);
+  }
+}
+
 async function loadDb() {
   // First, initialize Firebase if possible
   await initFirebase();
+  await loadGDriveConfig();
 
   // Load from local file first as primary or fallback
   try {
@@ -550,6 +622,34 @@ app.get('/api/employees', async (req, res) => {
 });
 
 // Google Drive Integration Endpoints
+app.get('/api/drive/config', async (req, res) => {
+  try {
+    res.json({ config: sharedDriveConfig });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to get drive config' });
+  }
+});
+
+app.post('/api/drive/config', async (req, res) => {
+  try {
+    const { accessToken, user, storageProvider } = req.body;
+    const config = { accessToken, user, storageProvider };
+    await saveGDriveConfig(config);
+    res.json({ success: true, config });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to save drive config' });
+  }
+});
+
+app.delete('/api/drive/config', async (req, res) => {
+  try {
+    await deleteGDriveConfig();
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to delete drive config' });
+  }
+});
+
 app.post('/api/drive/upload', async (req, res) => {
   try {
     const authHeader = req.headers.authorization;

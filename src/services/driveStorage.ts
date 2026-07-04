@@ -31,12 +31,46 @@ export const initDriveAuth = (
         if (onAuthFailure) onAuthFailure();
       }
     } else {
+      // If we are logged out of Firebase but have a saved token/user from the server, keep it!
+      const savedToken = localStorage.getItem('google_drive_access_token');
+      const savedUserRaw = localStorage.getItem('gers_drive_user');
+      if (savedToken && savedUserRaw) {
+        cachedAccessToken = savedToken;
+        try {
+          const savedUser = JSON.parse(savedUserRaw);
+          if (onAuthSuccess) onAuthSuccess(savedUser as any, savedToken);
+          return;
+        } catch (e) {}
+      }
+
       cachedAccessToken = null;
       localStorage.removeItem('google_drive_access_token');
       localStorage.removeItem('gers_drive_user');
       if (onAuthFailure) onAuthFailure();
     }
   });
+};
+
+export const syncDriveConfigFromServer = async (): Promise<{ user: any; accessToken: string } | null> => {
+  try {
+    const response = await fetch('/api/drive/config');
+    if (response.ok) {
+      const data = await response.json();
+      if (data.config && data.config.accessToken) {
+        cachedAccessToken = data.config.accessToken;
+        localStorage.setItem('google_drive_access_token', cachedAccessToken);
+        localStorage.setItem('gers_drive_user', JSON.stringify(data.config.user));
+        localStorage.setItem('gers_storage_provider', 'gdrive');
+        window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { 
+          detail: { connected: true, provider: 'gdrive', user: data.config.user } 
+        }));
+        return { user: data.config.user, accessToken: cachedAccessToken };
+      }
+    }
+  } catch (err) {
+    console.error('[Drive Storage] Failed to sync drive config from server:', err);
+  }
+  return null;
 };
 
 export const googleSignIn = async (): Promise<{ user: User; accessToken: string } | null> => {
@@ -59,6 +93,23 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
       photoURL: result.user.photoURL
     };
     localStorage.setItem('gers_drive_user', JSON.stringify(userData));
+
+    // Save to server persistently
+    try {
+      await fetch('/api/drive/config', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          accessToken: cachedAccessToken,
+          user: userData,
+          storageProvider: 'gdrive'
+        })
+      });
+    } catch (serverErr) {
+      console.warn('Failed to save Google Drive config on server:', serverErr);
+    }
     
     return { user: result.user, accessToken: cachedAccessToken };
   } catch (error: any) {
@@ -83,10 +134,20 @@ export const getDriveAccessToken = async (): Promise<string | null> => {
   return cachedAccessToken;
 };
 
-const clearDriveAuth = () => {
+const clearDriveAuth = async () => {
   cachedAccessToken = null;
   localStorage.removeItem('google_drive_access_token');
   localStorage.removeItem('gers_drive_user');
+  
+  // Clear on server persistently
+  try {
+    await fetch('/api/drive/config', {
+      method: 'DELETE'
+    });
+  } catch (serverErr) {
+    console.warn('Failed to delete Google Drive config on server:', serverErr);
+  }
+
   window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { 
     detail: { connected: false, provider: null, user: null } 
   }));
@@ -94,7 +155,7 @@ const clearDriveAuth = () => {
 
 export const driveLogout = async () => {
   await auth.signOut();
-  clearDriveAuth();
+  await clearDriveAuth();
 };
 
 export const uploadFileToDrive = async (

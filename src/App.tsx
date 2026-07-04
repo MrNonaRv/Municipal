@@ -12,7 +12,7 @@ import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getDriveAccessToken, initDriveAuth } from './services/driveStorage';
+import { getDriveAccessToken, initDriveAuth, syncDriveConfigFromServer } from './services/driveStorage';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -109,10 +109,18 @@ export default function App() {
     checkInitialSync();
 
     // Check initial storage connections
-    getDriveAccessToken().then(token => {
-      if (token) {
+    syncDriveConfigFromServer().then(sharedConfig => {
+      if (sharedConfig) {
         setIsDriveConnected(true);
+        setDriveUser(sharedConfig.user);
         updateStorageProvider('gdrive');
+      } else {
+        getDriveAccessToken().then(token => {
+          if (token) {
+            setIsDriveConnected(true);
+            updateStorageProvider('gdrive');
+          }
+        });
       }
     });
 
