@@ -858,9 +858,13 @@ app.post('/api/employees/chunk', async (req, res) => {
     } else {
       return res.json({ success: true, completed: false, received: receivedCount });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error in chunked upload:', error);
-    res.status(500).json({ error: 'Failed to process chunk' });
+    res.status(500).json({ 
+      error: 'Failed to process chunk',
+      message: error.message,
+      stack: error.stack
+    });
   }
 });
 
@@ -964,9 +968,13 @@ app.post('/api/employees', async (req, res) => {
 
     await syncDrizzleToFirestore();
     res.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Failed to save employee' });
+    res.status(500).json({ 
+      error: 'Failed to save employee', 
+      message: error.message, 
+      stack: error.stack 
+    });
   }
 });
 
@@ -977,8 +985,13 @@ app.delete('/api/employees/:id', async (req, res) => {
 
     await syncDrizzleToFirestore();
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to delete employee' });
+  } catch (error: any) {
+    console.error(error);
+    res.status(500).json({ 
+      error: 'Failed to delete employee', 
+      message: error.message, 
+      stack: error.stack 
+    });
   }
 });
 

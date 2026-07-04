@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, RefreshCw, Wifi, WifiOff, AlertTriangle, CheckCircle, Info } from 'lucide-react';
+import { X, RefreshCw, Wifi, WifiOff, AlertTriangle, CheckCircle, Info, ChevronDown, ChevronUp, Terminal } from 'lucide-react';
 import { motion } from 'motion/react';
 import { getSyncHistory, SyncHistoryEvent } from '../services/db';
 
@@ -9,6 +9,7 @@ interface Props {
 
 export default function SyncHistoryModal({ onClose }: Props) {
   const [history, setHistory] = useState<SyncHistoryEvent[]>([]);
+  const [expandedEvents, setExpandedEvents] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setHistory(getSyncHistory());
@@ -23,6 +24,13 @@ export default function SyncHistoryModal({ onClose }: Props) {
     };
   }, []);
 
+  const toggleEventStack = (eventId: string) => {
+    setExpandedEvents(prev => ({
+      ...prev,
+      [eventId]: !prev[eventId]
+    }));
+  };
+
   const getIconForType = (type: string) => {
     switch (type) {
       case 'SYNC_START': return <RefreshCw size={14} className="text-blue-500" />;
@@ -33,6 +41,71 @@ export default function SyncHistoryModal({ onClose }: Props) {
       case 'ONLINE_STATUS_CHANGE': return <Wifi size={14} className="text-indigo-500" />;
       default: return <Info size={14} className="text-slate-400" />;
     }
+  };
+
+  const renderDetails = (event: SyncHistoryEvent) => {
+    if (!event.details) return null;
+
+    // Check if details is a structured error object
+    const isObject = typeof event.details === 'object' && event.details !== null;
+    if (isObject) {
+      const { errorCode, message, stack, url, method } = event.details;
+      const isExpanded = !!expandedEvents[event.id];
+
+      return (
+        <div className="mt-2 text-xs bg-slate-50 border border-slate-200 rounded-lg p-3">
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            {method && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700 font-mono uppercase">
+                {method}
+              </span>
+            )}
+            {url && (
+              <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded break-all select-all">
+                {url}
+              </span>
+            )}
+            {errorCode && (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                errorCode === 'NETWORK_ERROR' 
+                  ? 'bg-amber-100 text-amber-700' 
+                  : 'bg-rose-100 text-rose-700'
+              }`}>
+                CODE: {errorCode}
+              </span>
+            )}
+          </div>
+          
+          <p className="text-slate-700 font-medium mb-1">{message || 'An error occurred during synchronization.'}</p>
+          
+          {stack && (
+            <div className="mt-2">
+              <button
+                onClick={() => toggleEventStack(event.id)}
+                className="flex items-center gap-1 text-[10px] font-bold text-[var(--navy)] hover:text-blue-700 transition-colors uppercase tracking-wider focus:outline-none"
+              >
+                <Terminal size={12} />
+                {isExpanded ? 'Hide Stack Trace' : 'View Stack Trace'}
+                {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+              </button>
+              
+              {isExpanded && (
+                <pre className="mt-2 font-mono text-[10px] leading-relaxed overflow-x-auto whitespace-pre p-3 bg-slate-900 text-slate-300 rounded-lg max-h-48 border border-slate-800 shadow-inner scrollbar-thin select-all break-all">
+                  {stack}
+                </pre>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Fallback for flat strings
+    return (
+      <p className="text-xs text-rose-600 mt-1 font-mono bg-rose-50 p-2 rounded border border-rose-100 break-all">
+        {event.details}
+      </p>
+    );
   };
 
   return (
@@ -78,11 +151,7 @@ export default function SyncHistoryModal({ onClose }: Props) {
                       </div>
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{event.message}</p>
-                        {event.details && (
-                          <p className="text-xs text-rose-600 mt-1 font-mono bg-rose-50 p-2 rounded border border-rose-100 break-all">
-                            {event.details}
-                          </p>
-                        )}
+                        {renderDetails(event)}
                         <p className="text-[10px] text-slate-400 uppercase tracking-wider mt-2 font-medium">
                           {new Date(event.timestamp).toLocaleString()}
                         </p>

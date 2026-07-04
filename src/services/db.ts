@@ -403,6 +403,24 @@ export const resetSyncRetry = () => {
   }
 };
 
+// Helper to parse server error bodies and create rich error objects
+async function handleResponseError(response: Response, defaultMessage: string, method: string) {
+  let errorData: any = {};
+  try {
+    const text = await response.text();
+    errorData = JSON.parse(text);
+  } catch (e) {
+    // Body wasn't json or failed to parse
+  }
+  const errMsg = errorData.message || errorData.error || `${defaultMessage} (Status: ${response.status})`;
+  const customErr: any = new Error(errMsg);
+  customErr.statusCode = response.status;
+  customErr.serverStack = errorData.stack;
+  customErr.url = response.url;
+  customErr.method = method;
+  return customErr;
+}
+
 // Sync function to process queue
 export const syncOfflineData = async (
   onProgress?: (status: 'syncing' | 'success' | 'error' | 'retrying', pendingCount: number, retryData?: { attempt: number, nextRetryDelay: number }) => void
@@ -481,7 +499,7 @@ export const syncOfflineData = async (
                 })
               });
               if (!response.ok) {
-                 throw new Error(`Server returned error status during chunk ${i}: ${response.status}`);
+                 throw await handleResponseError(response, `Server returned error status during chunk ${i}`, 'POST');
               }
             }
           } else {
@@ -491,7 +509,9 @@ export const syncOfflineData = async (
               body: payloadStr
             });
             console.log(`[syncOfflineData] POST response status: ${response.status} ${response.statusText}`);
-            if (!response.ok) throw new Error(`Server returned error status: ${response.status}`);
+            if (!response.ok) {
+              throw await handleResponseError(response, `Server returned error status`, 'POST');
+            }
           }
         } else if (item.type === 'DELETE') {
           console.log(`[syncOfflineData] Sending DELETE /api/employees/${item.id}`);
@@ -499,7 +519,9 @@ export const syncOfflineData = async (
             method: 'DELETE'
           });
           console.log(`[syncOfflineData] DELETE response status: ${response.status} ${response.statusText}`);
-          if (!response.ok) throw new Error(`Server returned error status: ${response.status}`);
+          if (!response.ok) {
+            throw await handleResponseError(response, `Server returned error status`, 'DELETE');
+          }
         }
         console.log(`[syncOfflineData] Successfully synced item ${item.id}`);
         addSyncHistoryEvent({
@@ -513,13 +535,22 @@ export const syncOfflineData = async (
         item.retryCount = (item.retryCount || 0) + 1;
         item.lastError = err.message || String(err);
         
+        const errorDetails = {
+          errorCode: err.statusCode || 'NETWORK_ERROR',
+          message: err.message || String(err),
+          stack: err.serverStack || err.stack || '',
+          url: err.url || (item.type === 'PUT' ? '/api/employees' : `/api/employees/${item.id}`),
+          method: err.method || (item.type === 'PUT' ? 'POST' : 'DELETE'),
+          timestamp: new Date().toISOString()
+        };
+
         if (item.retryCount >= 5) {
           console.error(`[syncOfflineData] Item ${item.id} reached maximum individual retries (5). Parking it to prevent blocking.`);
           parkSyncItem(item);
           addSyncHistoryEvent({
             type: 'SYNC_ITEM_ERROR',
             message: `Permanently failed to sync item: ${item.type} for ${item.id} (Max retries reached). Item parked.`,
-            details: item.lastError
+            details: errorDetails
           });
           // Dispatch custom event to notify App.tsx to display a notification/toast about the parked item
           window.dispatchEvent(new CustomEvent('gers_sync_parked_item', { detail: item }));
@@ -528,7 +559,7 @@ export const syncOfflineData = async (
           addSyncHistoryEvent({
             type: 'SYNC_ITEM_ERROR',
             message: `Failed to sync item (Attempt ${item.retryCount}/5): ${item.type} for ${item.id}`,
-            details: item.lastError
+            details: errorDetails
           });
         }
         
