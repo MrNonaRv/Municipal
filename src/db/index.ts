@@ -118,7 +118,7 @@ const selectBuilder = {
       where: (condition: any) => {
         const resultPromise = (async () => {
           const data = await readLocalJsonDb();
-          let list = table === schema.employees ? data.employees : data.users;
+          let list = (table === schema.employees ? data.employees : data.users) || [];
           if (condition) {
             list = list.filter((item: any) => evaluateCondition(item, condition));
           }
@@ -140,7 +140,7 @@ const selectBuilder = {
       then: (onfulfilled: any) => {
         const resultPromise = (async () => {
           const data = await readLocalJsonDb();
-          return table === schema.employees ? data.employees : data.users;
+          return (table === schema.employees ? data.employees : data.users) || [];
         })();
         return resultPromise.then(onfulfilled);
       }
@@ -155,7 +155,7 @@ const updateBuilder = (table: any) => {
         where: (condition: any) => {
           const resultPromise = (async () => {
             const dbData = await readLocalJsonDb();
-            const list = table === schema.employees ? dbData.employees : dbData.users;
+            const list = (table === schema.employees ? dbData.employees : dbData.users) || [];
             for (let i = 0; i < list.length; i++) {
               if (evaluateCondition(list[i], condition)) {
                 list[i] = { ...list[i], ...data };
@@ -178,7 +178,7 @@ const insertBuilder = (table: any) => {
     values: (data: any) => {
       const runInsert = async () => {
         const dbData = await readLocalJsonDb();
-        const list = table === schema.employees ? dbData.employees : dbData.users;
+        const list = (table === schema.employees ? dbData.employees : dbData.users) || [];
         let insertedItems: any[] = [];
         const itemsToInsert = Array.isArray(data) ? data : [data];
         for (const item of itemsToInsert) {
@@ -211,6 +211,7 @@ const insertBuilder = (table: any) => {
       };
       return {
         onConflictDoUpdate: (config: any) => onConflictBuilder,
+        returning: () => onConflictBuilder,
         then: (onfulfilled: any) => promise.then(onfulfilled)
       };
     }
@@ -222,7 +223,7 @@ const deleteBuilder = (table: any) => {
     where: (condition: any) => {
       const resultPromise = (async () => {
         const dbData = await readLocalJsonDb();
-        const list = table === schema.employees ? dbData.employees : dbData.users;
+        const list = (table === schema.employees ? dbData.employees : dbData.users) || [];
         const newList = list.filter((item: any) => !evaluateCondition(item, condition));
         if (table === schema.employees) {
           dbData.employees = newList;

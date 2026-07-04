@@ -129,15 +129,34 @@ export const uploadFileToDrive = async (
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    let errorMsg = 'Failed to upload to Google Drive';
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMsg = error.error || errorMsg;
+      }
+    } catch (e) {
+      console.warn('Could not parse error response');
+    }
     if (response.status === 401) {
       clearDriveAuth();
       throw new Error('Google Drive session expired. Please reconnect your account.');
     }
-    throw new Error(error.error || 'Failed to upload to Google Drive');
+    throw new Error(errorMsg);
   }
 
-  const result = await response.json();
+  let result;
+  try {
+    const contentType = response.headers.get('content-type');
+    if (contentType && contentType.includes('application/json')) {
+      result = await response.json();
+    } else {
+      throw new Error('Server returned non-JSON response');
+    }
+  } catch (err) {
+    throw new Error('Failed to parse response from server');
+  }
   return {
     success: true,
     id: result.id,
@@ -180,11 +199,20 @@ export const deleteFileFromDrive = async (fileId: string): Promise<void> => {
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    let errorMsg = 'Failed to delete file from Google Drive';
+    try {
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const error = await response.json();
+        errorMsg = error.error || errorMsg;
+      }
+    } catch (e) {
+      console.warn('Could not parse error response');
+    }
     if (response.status === 401) {
       clearDriveAuth();
       throw new Error('Google Drive session expired. Please reconnect your account.');
     }
-    throw new Error(error.error || 'Failed to delete file from Google Drive');
+    throw new Error(errorMsg);
   }
 };

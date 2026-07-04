@@ -860,9 +860,9 @@ app.post('/api/employees/clear-all', async (req, res) => {
 
     await syncDrizzleToFirestore();
     res.json({ success: true });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Failed to clear all data:', error);
-    res.status(500).json({ error: 'Failed to clear all data' });
+    res.status(500).json({ error: 'Failed to clear all data', message: error.message, stack: error.stack });
   }
 });
 

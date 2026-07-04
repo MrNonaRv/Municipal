@@ -510,11 +510,16 @@ export const syncOfflineData = async (
         const latestResponse = await fetch('/api/employees');
         console.log(`[syncOfflineData] Refresh fetch status: ${latestResponse.status}`);
         if (latestResponse.ok) {
-          const latestData = await latestResponse.json();
-          console.log(`[syncOfflineData] Successfully refreshed cache with ${latestData.length} records.`);
-          saveLocalCache(latestData);
-          setServerReachable(true);
-          window.dispatchEvent(new CustomEvent('gers_data_synced', { detail: latestData }));
+          const contentType = latestResponse.headers.get('content-type');
+          if (contentType && contentType.includes('application/json')) {
+            const latestData = await latestResponse.json();
+            console.log(`[syncOfflineData] Successfully refreshed cache with ${latestData.length} records.`);
+            saveLocalCache(latestData);
+            setServerReachable(true);
+            window.dispatchEvent(new CustomEvent('gers_data_synced', { detail: latestData }));
+          } else {
+            console.warn(`[syncOfflineData] Refresh fetch returned non-JSON response (likely HTML). Skipping cache refresh.`);
+          }
         } else {
           console.warn(`[syncOfflineData] Refresh fetch failed with status: ${latestResponse.status}`);
         }
@@ -559,10 +564,16 @@ export const dbGetAll = async (): Promise<Employee[]> => {
   try {
     const response = await fetch('/api/employees');
     if (response.ok) {
-      const data = await response.json();
-      saveLocalCache(data);
-      setServerReachable(true);
-      return data;
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const data = await response.json();
+        saveLocalCache(data);
+        setServerReachable(true);
+        return data;
+      } else {
+        console.warn(`[dbGetAll] Server returned non-JSON response (likely HTML during restart). Using cache.`);
+        return getLocalCache();
+      }
     }
     console.warn(`[dbGetAll] Server returned non-OK status: ${response.status}. Using cache.`);
     return getLocalCache();
