@@ -11,6 +11,8 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { google } from 'googleapis';
 import initialDatabase from './database.json';
+// @ts-ignore
+import firebaseConfig from './firebase-applet-config.json';
 
 import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
 import { employees } from './src/db/schema.ts';
@@ -95,31 +97,42 @@ let firestoreDb: any = null;
 
 async function initFirebase() {
   try {
-    let configRaw = '';
-    const configPaths = [
-      path.join(currentDirname, 'firebase-applet-config.json'),
-      path.join(currentDirname, '..', 'firebase-applet-config.json'),
-      path.join(process.cwd(), 'firebase-applet-config.json')
-    ];
-    for (const p of configPaths) {
-      try {
-        configRaw = await fs.readFile(p, 'utf-8');
-        if (configRaw) break;
-      } catch (e) {}
+    let config: any = null;
+    
+    // 1. Try statically imported/bundled config (which Vercel includes)
+    if (firebaseConfig && firebaseConfig.projectId) {
+      config = firebaseConfig;
     }
-    if (configRaw) {
-      const config = JSON.parse(configRaw);
-      if (config && config.projectId) {
-        console.log('[Firebase] Initializing Firebase client SDK with Project ID:', config.projectId);
-        firebaseApp = initializeApp(config);
-        const dbId = config.firestoreDatabaseId || '(default)';
-        console.log('[Firebase] Initializing Firestore with Project:', config.projectId, 'Database:', dbId);
-        firestoreDb = getFirestore(firebaseApp, dbId);
-        return true;
+    
+    // 2. Fallback to dynamic filesystem read (for dynamic/local runtime updates)
+    if (!config) {
+      let configRaw = '';
+      const configPaths = [
+        path.join(currentDirname, 'firebase-applet-config.json'),
+        path.join(currentDirname, '..', 'firebase-applet-config.json'),
+        path.join(process.cwd(), 'firebase-applet-config.json')
+      ];
+      for (const p of configPaths) {
+        try {
+          configRaw = await fs.readFile(p, 'utf-8');
+          if (configRaw) break;
+        } catch (e) {}
+      }
+      if (configRaw) {
+        config = JSON.parse(configRaw);
       }
     }
+
+    if (config && config.projectId) {
+      console.log('[Firebase] Initializing Firebase client SDK with Project ID:', config.projectId);
+      firebaseApp = initializeApp(config);
+      const dbId = config.firestoreDatabaseId || '(default)';
+      console.log('[Firebase] Initializing Firestore with Project:', config.projectId, 'Database:', dbId);
+      firestoreDb = getFirestore(firebaseApp, dbId);
+      return true;
+    }
   } catch (err: any) {
-    console.error('[Firebase] Failed to initialize Firebase. If you see NOT_FOUND, ensure Firestore is enabled in the Firebase Console:', err.message);
+    console.error('[Firebase] Failed to initialize Firebase:', err.message);
   }
   return false;
 }
