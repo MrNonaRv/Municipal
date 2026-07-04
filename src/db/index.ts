@@ -5,14 +5,26 @@ import fs from 'fs/promises';
 import path from 'path';
 
 export const createPool = () => {
+  if (process.env.DATABASE_URL) {
+    console.log('[DB] Creating PostgreSQL pool using DATABASE_URL...');
+    return new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: process.env.VERCEL ? 3 : 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 15000,
+      ssl: process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1') ? false : {
+        rejectUnauthorized: false
+      }
+    });
+  }
   return new Pool({
     host: process.env.SQL_HOST,
     user: process.env.SQL_USER,
     password: process.env.SQL_PASSWORD,
     database: process.env.SQL_DB_NAME,
-    max: 10,
+    max: process.env.VERCEL ? 3 : 10,
     idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 5000,
+    connectionTimeoutMillis: 15000,
     keepAlive: true,
   });
 };
@@ -33,17 +45,124 @@ pool.on('error', (err) => {
   console.warn('PostgreSQL Pool: Unexpected error on idle client:', err.message);
 });
 
+async function tableExists(client: any, tableName: string): Promise<boolean> {
+  try {
+    const res = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE  table_schema = 'public'
+        AND    table_name   = $1
+      );
+    `, [tableName]);
+    return res.rows[0]?.exists || false;
+  } catch (e) {
+    return false;
+  }
+}
+
+async function initializePostgresSchema(pgPool: Pool) {
+  const client = await pgPool.connect();
+  try {
+    console.log('[DB] Checking if PostgreSQL tables need to be created for Supabase/Postgres...');
+    
+    const usersExist = await tableExists(client, 'users');
+    if (!usersExist) {
+      console.log('[DB] Table "users" does not exist. Creating users table...');
+      await client.query(`
+        CREATE TABLE users (
+          id SERIAL PRIMARY KEY,
+          uid TEXT NOT NULL UNIQUE,
+          email TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+    } else {
+      console.log('[DB] Table "users" already exists, skipping creation.');
+    }
+    
+    const employeesExist = await tableExists(client, 'employees');
+    if (!employeesExist) {
+      console.log('[DB] Table "employees" does not exist. Creating employees table...');
+      await client.query(`
+        CREATE TABLE employees (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL REFERENCES users(id),
+          original_id TEXT NOT NULL,
+          photo TEXT,
+          surname TEXT NOT NULL DEFAULT '',
+          first_name TEXT NOT NULL DEFAULT '',
+          middle_name TEXT DEFAULT '',
+          name_extension TEXT DEFAULT '',
+          sex TEXT DEFAULT '',
+          civil_status TEXT DEFAULT '',
+          citizenship TEXT DEFAULT '',
+          height TEXT DEFAULT '',
+          weight TEXT DEFAULT '',
+          blood_type TEXT DEFAULT '',
+          residential_address TEXT DEFAULT '',
+          permanent_address TEXT DEFAULT '',
+          zip_code TEXT DEFAULT '',
+          telephone TEXT DEFAULT '',
+          cellphone TEXT DEFAULT '',
+          email TEXT DEFAULT '',
+          gsis_no TEXT DEFAULT '',
+          pagibig_no TEXT DEFAULT '',
+          philhealth_no TEXT DEFAULT '',
+          sss_no TEXT DEFAULT '',
+          tin TEXT DEFAULT '',
+          agency_employee_no TEXT DEFAULT '',
+          spouse_surname TEXT DEFAULT '',
+          spouse_first_name TEXT DEFAULT '',
+          spouse_middle_name TEXT DEFAULT '',
+          spouse_occupation TEXT DEFAULT '',
+          spouse_employer TEXT DEFAULT '',
+          spouse_telephone TEXT DEFAULT '',
+          children JSONB DEFAULT '[]'::jsonb,
+          father_surname TEXT DEFAULT '',
+          father_first_name TEXT DEFAULT '',
+          father_middle_name TEXT DEFAULT '',
+          mother_surname TEXT DEFAULT '',
+          mother_first_name TEXT DEFAULT '',
+          mother_middle_name TEXT DEFAULT '',
+          education JSONB DEFAULT '[]'::jsonb,
+          service_records JSONB DEFAULT '[]'::jsonb,
+          attachments JSONB DEFAULT '[]'::jsonb,
+          pds_scan TEXT,
+          created_at TIMESTAMP DEFAULT NOW()
+        );
+      `);
+    } else {
+      console.log('[DB] Table "employees" already exists, skipping creation.');
+    }
+    
+    console.log('[DB] PostgreSQL tables checked and verified.');
+  } catch (err: any) {
+    console.error('[DB] Failed to initialize PostgreSQL tables:', err.message);
+  } finally {
+    client.release();
+  }
+}
+
 // Resilient Fallback State
-let useFallbackMode = !process.env.SQL_HOST;
+let useFallbackMode = !process.env.SQL_HOST && !process.env.DATABASE_URL;
 let connectionChecked = false;
 
-async function checkConnection() {
-  if (connectionChecked || useFallbackMode) return;
+export async function checkConnection() {
+  if (connectionChecked) return;
+  
+  if (useFallbackMode) {
+    connectionChecked = true;
+    return;
+  }
   
   try {
     const client = await pool.connect();
     console.log('[DB] Successfully connected to PostgreSQL database.');
     client.release();
+    
+    // Automatically initialize PostgreSQL schema tables
+    await initializePostgresSchema(pool);
+    
     connectionChecked = true;
   } catch (err: any) {
     console.warn('[DB] Failed to connect to PostgreSQL database. Falling back to local JSON database.', err.message);
@@ -114,37 +233,36 @@ function evaluateCondition(item: any, condition: any): boolean {
 
 const selectBuilder = {
   from: (table: any) => {
-    return {
+    let whereCondition: any = undefined;
+    let limitValue: number | undefined = undefined;
+
+    const execute = async () => {
+      const data = await readLocalJsonDb();
+      let list = (table === schema.employees ? data.employees : data.users) || [];
+      if (whereCondition) {
+        list = list.filter((item: any) => evaluateCondition(item, whereCondition));
+      }
+      if (limitValue !== undefined) {
+        list = list.slice(0, limitValue);
+      }
+      return list;
+    };
+
+    const builderObj = {
       where: (condition: any) => {
-        const resultPromise = (async () => {
-          const data = await readLocalJsonDb();
-          let list = (table === schema.employees ? data.employees : data.users) || [];
-          if (condition) {
-            list = list.filter((item: any) => evaluateCondition(item, condition));
-          }
-          return list;
-        })();
-        return {
-          limit: (n: number) => {
-            const limitPromise = (async () => {
-              const list = await resultPromise;
-              return list.slice(0, n);
-            })();
-            return {
-              then: (onfulfilled: any) => limitPromise.then(onfulfilled)
-            };
-          },
-          then: (onfulfilled: any) => resultPromise.then(onfulfilled)
-        };
+        whereCondition = condition;
+        return builderObj;
+      },
+      limit: (n: number) => {
+        limitValue = n;
+        return builderObj;
       },
       then: (onfulfilled: any) => {
-        const resultPromise = (async () => {
-          const data = await readLocalJsonDb();
-          return (table === schema.employees ? data.employees : data.users) || [];
-        })();
-        return resultPromise.then(onfulfilled);
+        return execute().then(onfulfilled);
       }
     };
+
+    return builderObj;
   }
 };
 

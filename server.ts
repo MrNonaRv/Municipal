@@ -14,7 +14,7 @@ import initialDatabase from './database.json';
 // @ts-ignore
 import firebaseConfig from './firebase-applet-config.json';
 
-import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
+import { db, isFallbackActive, getLocalDbPath, checkConnection } from './src/db/index.ts';
 import { employees } from './src/db/schema.ts';
 import { getOrCreateUser } from './src/db/users.ts';
 import { eq } from 'drizzle-orm';
@@ -479,8 +479,26 @@ async function loadDrizzleFromFirestore() {
 }
 
 let isInitializing = false;
+let lastFirestoreLoadTime = 0;
+const FIREBASE_SYNC_INTERVAL_MS = 10000; // 10 seconds cache invalidation for warm Vercel serverless instances
 
 async function ensureDbLoaded() {
+  const now = Date.now();
+  
+  // 1. Establish/verify database connections (PostgreSQL/Supabase or local JSON mode setup)
+  await checkConnection();
+
+  // 2. If already loaded, and we are running in local/fallback JSON file database mode on Vercel,
+  // we regularly sync from Firestore to pull changes from other active/warm serverless instances or devices.
+  if (dbLoaded && isFallbackActive()) {
+    if (now - lastFirestoreLoadTime > FIREBASE_SYNC_INTERVAL_MS) {
+      console.log('[Firebase] Warm serverless instance: checking and updating local cache from Firestore...');
+      await loadDrizzleFromFirestore();
+      lastFirestoreLoadTime = now;
+    }
+    return;
+  }
+
   if (dbLoaded) return;
   
   if (isInitializing) {
@@ -496,6 +514,7 @@ async function ensureDbLoaded() {
     await initFirebase();
     // Restore Drizzle fallback from Firestore BEFORE seeding or other operations
     await loadDrizzleFromFirestore();
+    lastFirestoreLoadTime = Date.now();
     
     await loadDb(); // Old sync system
     await seedRealEmployeesIfNeeded();
