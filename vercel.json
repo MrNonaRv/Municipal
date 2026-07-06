@@ -1,12 +1,12 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.ts" },
+    { "source": "/api/(.*)", "destination": "/api/index.cjs" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/**/*": {
-      "includeFiles": "firebase-applet-config.json"
+      "includeFiles": "{dist/**,firebase-applet-config.json}"
     }
   }
 }

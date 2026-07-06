@@ -14,7 +14,7 @@ import { google } from 'googleapis';
 import { db, isFallbackActive, getLocalDbPath } from './src/db/index';
 import { employees } from './src/db/schema';
 import { getOrCreateUser } from './src/db/users';
-import { loadGDriveConfig, setupDriveRoutes } from "./src/api/drive.ts";
+import { loadGDriveConfig, setupDriveRoutes } from "./src/api/drive";
 import { eq } from 'drizzle-orm';
 
 async function getDummyUser() {
