@@ -102,8 +102,10 @@ export function setupDriveRoutes(app: express.Express, firestoreDb: any, current
   app.post('/api/drive/upload', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const accessToken = authHeader?.split(' ')[1];
-
+      let accessToken = authHeader?.split(' ')[1];
+      if (!accessToken || accessToken === 'null') {
+        accessToken = sharedDriveConfig?.accessToken;
+      }
       if (!accessToken) {
         return res.status(401).json({ error: 'Missing access token' });
       }
@@ -221,8 +223,10 @@ export function setupDriveRoutes(app: express.Express, firestoreDb: any, current
   app.get('/api/drive/download/:fileId', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const accessToken = authHeader?.split(' ')[1];
-
+      let accessToken = authHeader?.split(' ')[1];
+      if (!accessToken || accessToken === 'null') {
+        accessToken = sharedDriveConfig?.accessToken;
+      }
       if (!accessToken) {
         return res.status(401).json({ error: 'Missing access token' });
       }
@@ -263,8 +267,10 @@ export function setupDriveRoutes(app: express.Express, firestoreDb: any, current
   app.delete('/api/drive/delete/:fileId', async (req, res) => {
     try {
       const authHeader = req.headers.authorization;
-      const accessToken = authHeader?.split(' ')[1];
-
+      let accessToken = authHeader?.split(' ')[1];
+      if (!accessToken || accessToken === 'null') {
+        accessToken = sharedDriveConfig?.accessToken;
+      }
       if (!accessToken) {
         return res.status(401).json({ error: 'Missing access token' });
       }

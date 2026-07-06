@@ -5,6 +5,14 @@ import fs from 'fs/promises';
 import path from 'path';
 
 export const createPool = () => {
+  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+    return new Pool({
+      connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 5000,
+    });
+  }
   return new Pool({
     host: process.env.SQL_HOST,
     user: process.env.SQL_USER,
@@ -34,7 +42,7 @@ pool.on('error', (err) => {
 });
 
 // Resilient Fallback State
-let useFallbackMode = !process.env.SQL_HOST;
+let useFallbackMode = !(process.env.SQL_HOST || process.env.DATABASE_URL || process.env.POSTGRES_URL);
 let connectionChecked = false;
 
 async function checkConnection() {

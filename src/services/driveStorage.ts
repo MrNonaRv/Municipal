@@ -131,6 +131,12 @@ export const getDriveAccessToken = async (): Promise<string | null> => {
   if (!cachedAccessToken) {
     cachedAccessToken = localStorage.getItem('google_drive_access_token');
   }
+  if (!cachedAccessToken) {
+    const shared = await syncDriveConfigFromServer();
+    if (shared) {
+      cachedAccessToken = shared.accessToken;
+    }
+  }
   return cachedAccessToken;
 };
 
