@@ -10,7 +10,7 @@ import ToastContainer from './components/Toast';
 import ConfirmModal from './components/ConfirmModal';
 import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
-import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity } from 'lucide-react';
+import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity, Database, X, Server, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getDriveAccessToken, initDriveAuth, syncDriveConfigFromServer } from './services/driveStorage';
 
@@ -56,6 +56,8 @@ export default function App() {
   // Offline Sync States
   const [workMode, setWorkModeState] = useState<WorkMode>(getWorkMode());
   const [isOnlineState, setIsOnlineState] = useState(navigator.onLine);
+  const [syncDiagnostic, setSyncDiagnostic] = useState<any>(null);
+  const [showDiagnosticModal, setShowDiagnosticModal] = useState(false);
   const [syncQueueCount, setSyncQueueCount] = useState(0);
   const [isSyncingState, setIsSyncingState] = useState(false);
 
@@ -91,6 +93,9 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Check sync status
+    fetch('/api/sync-diagnostic').then(r => r.json()).then(data => setSyncDiagnostic(data)).catch(console.error);
+    
     // Initial data load - force server refresh if reachable to catch other device changes
     loadEmployees(true);
 
@@ -378,10 +383,18 @@ export default function App() {
                 
                 {/* Status Indicator */}
                 {isOnlineState ? (
-                  <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet and server">
-                    <Wifi size={10} className="text-emerald-400 animate-pulse" />
-                    System Online
-                  </span>
+                  <div className="flex items-center">
+                    <span className="px-2 py-0.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0" title="Connected to the internet and server">
+                      <Wifi size={10} className="text-emerald-400 animate-pulse" />
+                      System Online
+                    </span>
+                    {syncDiagnostic && (
+                    <button onClick={() => setShowDiagnosticModal(true)} className="px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-full text-[8px] font-black uppercase tracking-widest flex items-center gap-1 shrink-0 ml-2 hover:bg-blue-500/20 transition-colors">
+                      <Database size={10} />
+                      DB Sync Status
+                      </button>
+                    )}
+                  </div>
                 ) : (
                   <button 
                     onClick={() => {
