@@ -11,12 +11,11 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { google } from 'googleapis';
 import initialDatabase from './database.json';
-// @ts-ignore
-import firebaseConfig from './firebase-applet-config.json';
 
 import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
 import { employees } from './src/db/schema.ts';
 import { getOrCreateUser } from './src/db/users.ts';
+import { loadGDriveConfig, setupDriveRoutes } from "./src/api/drive.ts";
 import { eq } from 'drizzle-orm';
 
 async function getDummyUser() {
@@ -97,121 +96,40 @@ let firestoreDb: any = null;
 
 async function initFirebase() {
   try {
-    let config: any = null;
-    
-    // 1. Try statically imported/bundled config (which Vercel includes)
-    if (firebaseConfig && firebaseConfig.projectId) {
-      config = firebaseConfig;
+    let configRaw = '';
+    const configPaths = [
+      path.join(currentDirname, 'firebase-applet-config.json'),
+      path.join(currentDirname, '..', 'firebase-applet-config.json'),
+      path.join(process.cwd(), 'firebase-applet-config.json')
+    ];
+    for (const p of configPaths) {
+      try {
+        configRaw = await fs.readFile(p, 'utf-8');
+        if (configRaw) break;
+      } catch (e) {}
     }
-    
-    // 2. Fallback to dynamic filesystem read (for dynamic/local runtime updates)
-    if (!config) {
-      let configRaw = '';
-      const configPaths = [
-        path.join(currentDirname, 'firebase-applet-config.json'),
-        path.join(currentDirname, '..', 'firebase-applet-config.json'),
-        path.join(process.cwd(), 'firebase-applet-config.json')
-      ];
-      for (const p of configPaths) {
-        try {
-          configRaw = await fs.readFile(p, 'utf-8');
-          if (configRaw) break;
-        } catch (e) {}
+    if (configRaw) {
+      const config = JSON.parse(configRaw);
+      if (config && config.projectId) {
+        console.log('[Firebase] Initializing Firebase client SDK with Project ID:', config.projectId);
+        firebaseApp = initializeApp(config);
+        const dbId = config.firestoreDatabaseId || '(default)';
+        console.log('[Firebase] Initializing Firestore with Project:', config.projectId, 'Database:', dbId);
+        firestoreDb = getFirestore(firebaseApp, dbId);
+        return true;
       }
-      if (configRaw) {
-        config = JSON.parse(configRaw);
-      }
-    }
-
-    if (config && config.projectId) {
-      console.log('[Firebase] Initializing Firebase client SDK with Project ID:', config.projectId);
-      firebaseApp = initializeApp(config);
-      const dbId = config.firestoreDatabaseId || '(default)';
-      console.log('[Firebase] Initializing Firestore with Project:', config.projectId, 'Database:', dbId);
-      firestoreDb = getFirestore(firebaseApp, dbId);
-      return true;
     }
   } catch (err: any) {
-    console.error('[Firebase] Failed to initialize Firebase:', err.message);
+    console.error('[Firebase] Failed to initialize Firebase. If you see NOT_FOUND, ensure Firestore is enabled in the Firebase Console:', err.message);
   }
   return false;
 }
 
-let sharedDriveConfig: { accessToken: string | null; user: any; storageProvider: string | null } | null = null;
-
-async function loadGDriveConfig() {
-  const GDRIVE_CONFIG_FILE = path.join(currentDirname, 'gdrive_config.json');
-  try {
-    // Try local file first
-    try {
-      const content = await fs.readFile(GDRIVE_CONFIG_FILE, 'utf-8');
-      sharedDriveConfig = JSON.parse(content);
-      console.log('[Google Drive Config] Loaded local configuration:', sharedDriveConfig?.user?.email);
-    } catch (e) {
-      // Local file not found or corrupted
-    }
-
-    // Try Firestore if available (Firestore is master)
-    if (firestoreDb) {
-      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
-      const docSnap = await getDoc(docRef);
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        sharedDriveConfig = {
-          accessToken: data.accessToken || null,
-          user: data.user || null,
-          storageProvider: data.storageProvider || null
-        };
-        console.log('[Google Drive Config] Restored configuration from Firestore:', sharedDriveConfig?.user?.email);
-        // Sync back to local file
-        await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(sharedDriveConfig, null, 2), 'utf-8');
-      } else if (sharedDriveConfig) {
-        // If Firestore doc doesn't exist but local file does, seed Firestore
-        console.log('[Google Drive Config] Seeding Firestore with local configuration...');
-        await setDoc(docRef, sharedDriveConfig);
-      }
-    }
-  } catch (err) {
-    console.error('[Google Drive Config] Failed to load Google Drive config:', err);
-  }
-}
-
-async function saveGDriveConfig(config: any) {
-  const GDRIVE_CONFIG_FILE = path.join(currentDirname, 'gdrive_config.json');
-  sharedDriveConfig = config;
-  try {
-    await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-    if (firestoreDb) {
-      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
-      await setDoc(docRef, config);
-    }
-    console.log('[Google Drive Config] Saved shared configuration:', config?.user?.email);
-  } catch (err) {
-    console.error('[Google Drive Config] Failed to save Google Drive config:', err);
-  }
-}
-
-async function deleteGDriveConfig() {
-  const GDRIVE_CONFIG_FILE = path.join(currentDirname, 'gdrive_config.json');
-  sharedDriveConfig = null;
-  try {
-    try {
-      await fs.unlink(GDRIVE_CONFIG_FILE);
-    } catch (e) {}
-    if (firestoreDb) {
-      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
-      await deleteDoc(docRef);
-    }
-    console.log('[Google Drive Config] Deleted shared configuration');
-  } catch (err) {
-    console.error('[Google Drive Config] Failed to delete Google Drive config:', err);
-  }
-}
 
 async function loadDb() {
   // First, initialize Firebase if possible
   await initFirebase();
-  await loadGDriveConfig();
+  await loadGDriveConfig(firestoreDb, currentDirname);
 
   // Load from local file first as primary or fallback
   try {
@@ -635,218 +553,8 @@ app.get('/api/employees', async (req, res) => {
 });
 
 // Google Drive Integration Endpoints
-app.get('/api/drive/config', async (req, res) => {
-  try {
-    res.json({ config: sharedDriveConfig });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to get drive config' });
-  }
-});
+setupDriveRoutes(app, firestoreDb, currentDirname);
 
-app.post('/api/drive/config', async (req, res) => {
-  try {
-    const { accessToken, user, storageProvider } = req.body;
-    const config = { accessToken, user, storageProvider };
-    await saveGDriveConfig(config);
-    res.json({ success: true, config });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to save drive config' });
-  }
-});
-
-app.delete('/api/drive/config', async (req, res) => {
-  try {
-    await deleteGDriveConfig();
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(500).json({ error: error.message || 'Failed to delete drive config' });
-  }
-});
-
-app.post('/api/drive/upload', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.split(' ')[1];
-    if (!accessToken) {
-      return res.status(401).json({ error: 'Missing access token' });
-    }
-
-    const { fileName, mimeType, fileData, folderName } = req.body;
-    if (!fileName || !mimeType || !fileData) {
-      return res.status(400).json({ error: 'Missing fileName, mimeType, or fileData' });
-    }
-
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ 
-      access_token: accessToken,
-      token_type: 'Bearer'
-    });
-    const drive = google.drive({ version: 'v3', auth: oauth2Client });
-
-    // Ensure dedicated root folder exists: "GovRecords_Attachments"
-    let rootFolderId = '';
-    try {
-      const folderResponse = await drive.files.list({
-        q: "name = 'GovRecords_Attachments' and mimeType = 'application/vnd.google-apps.folder' and trashed = false",
-        fields: 'files(id)',
-        spaces: 'drive',
-      });
-
-      if (folderResponse.data.files && folderResponse.data.files.length > 0) {
-        rootFolderId = folderResponse.data.files[0].id!;
-      } else {
-        const createFolderResponse = await drive.files.create({
-          requestBody: {
-            name: 'GovRecords_Attachments',
-            mimeType: 'application/vnd.google-apps.folder',
-          },
-          fields: 'id',
-        });
-        rootFolderId = createFolderResponse.data.id!;
-      }
-    } catch (err: any) {
-      console.warn('Error finding/creating root folder:', err);
-      // If we get a 401 here, it's an auth error
-      if (err.code === 401 || err.response?.status === 401 || err.message?.includes('invalid authentication credentials')) {
-        return res.status(401).json({ error: 'Google Drive authentication expired or invalid. Please reconnect.' });
-      }
-    }
-
-    let finalFolderId = rootFolderId;
-
-    // If folderName is provided, create a subfolder inside root folder
-    if (folderName && rootFolderId) {
-      try {
-        const subFolderResponse = await drive.files.list({
-          q: `name = '${folderName.replace(/'/g, "\\'")}' and '${rootFolderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
-          fields: 'files(id)',
-          spaces: 'drive',
-        });
-
-        if (subFolderResponse.data.files && subFolderResponse.data.files.length > 0) {
-          finalFolderId = subFolderResponse.data.files[0].id!;
-        } else {
-          const createSubFolderResponse = await drive.files.create({
-            requestBody: {
-              name: folderName,
-              mimeType: 'application/vnd.google-apps.folder',
-              parents: [rootFolderId],
-            },
-            fields: 'id',
-          });
-          finalFolderId = createSubFolderResponse.data.id!;
-        }
-      } catch (err) {
-        console.warn(`Error finding/creating subfolder '${folderName}':`, err);
-      }
-    }
-
-    // Extract base64 data
-    const base64Data = fileData.split(';base64,').pop();
-    const buffer = Buffer.from(base64Data, 'base64');
-    const bufferStream = new PassThrough();
-    bufferStream.end(buffer);
-
-    const fileMetadata: any = {
-      name: fileName,
-    };
-    
-    if (finalFolderId) {
-      fileMetadata.parents = [finalFolderId];
-    }
-
-    const media = {
-      mimeType: mimeType,
-      body: bufferStream,
-    };
-
-    const response = await drive.files.create({
-      requestBody: fileMetadata,
-      media: media,
-      fields: 'id, name, webViewLink, webContentLink',
-    });
-
-    res.json({
-      success: true,
-      id: response.data.id,
-      name: response.data.name,
-      webViewLink: response.data.webViewLink,
-      webContentLink: response.data.webContentLink,
-    });
-  } catch (error: any) {
-    console.error('Drive upload error:', error);
-    if (error.code === 401 || error.response?.status === 401 || error.message?.includes('invalid authentication credentials')) {
-      return res.status(401).json({ error: 'Google Drive authentication expired or invalid.' });
-    }
-    res.status(500).json({ error: error.message || 'Failed to upload to Google Drive' });
-  }
-});
-
-app.get('/api/drive/download/:fileId', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.split(' ')[1];
-    if (!accessToken) {
-      return res.status(401).json({ error: 'Missing access token' });
-    }
-
-    const fileId = req.params.fileId;
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ 
-      access_token: accessToken,
-      token_type: 'Bearer'
-    });
-    const drive = google.drive({ version: 'v3', auth: oauth2Client });
-
-    const response = await drive.files.get(
-      { fileId, alt: 'media' },
-      { responseType: 'arraybuffer' }
-    );
-
-    const metadata = await drive.files.get({
-      fileId,
-      fields: 'name, mimeType',
-    });
-
-    const buffer = Buffer.from(response.data as ArrayBuffer);
-    res.setHeader('Content-Type', metadata.data.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(metadata.data.name || 'file')}"`);
-    res.send(buffer);
-  } catch (error: any) {
-    console.error('Drive download error:', error);
-    if (error.code === 401 || error.response?.status === 401 || error.message?.includes('invalid authentication credentials')) {
-      return res.status(401).json({ error: 'Google Drive authentication expired or invalid.' });
-    }
-    res.status(500).json({ error: error.message || 'Failed to download from Google Drive' });
-  }
-});
-
-app.delete('/api/drive/delete/:fileId', async (req, res) => {
-  try {
-    const authHeader = req.headers.authorization;
-    const accessToken = authHeader?.split(' ')[1];
-    if (!accessToken) {
-      return res.status(401).json({ error: 'Missing access token' });
-    }
-
-    const fileId = req.params.fileId;
-    const oauth2Client = new google.auth.OAuth2();
-    oauth2Client.setCredentials({ 
-      access_token: accessToken,
-      token_type: 'Bearer'
-    });
-    const drive = google.drive({ version: 'v3', auth: oauth2Client });
-
-    await drive.files.delete({ fileId });
-    res.json({ success: true });
-  } catch (error: any) {
-    console.error('Drive delete error:', error);
-    if (error.code === 401 || error.response?.status === 401 || error.message?.includes('invalid authentication credentials')) {
-      return res.status(401).json({ error: 'Google Drive authentication expired or invalid.' });
-    }
-    res.status(500).json({ error: error.message || 'Failed to delete from Google Drive' });
-  }
-});
 
 
 const uploadChunks = new Map<string, string[]>();
