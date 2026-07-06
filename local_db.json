@@ -1,0 +1,11 @@
+{
+  "users": [
+    {
+      "id": 1,
+      "uid": "dummy_desktop_user",
+      "email": "desktop_user@local",
+      "createdAt": "2026-07-06T05:35:29.482Z"
+    }
+  ],
+  "employees": []
+}

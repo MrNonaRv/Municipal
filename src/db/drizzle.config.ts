@@ -2,7 +2,10 @@ import { defineConfig } from "drizzle-kit";
 import * as dotenv from "dotenv";
 dotenv.config();
 
-const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
+let connectionString = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+if (connectionString && !connectionString.startsWith('postgres://') && !connectionString.startsWith('postgresql://')) {
+  connectionString = null;
+}
 
 let config;
 if (connectionString) {

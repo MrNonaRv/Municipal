@@ -5,9 +5,10 @@ import fs from 'fs/promises';
 import path from 'path';
 
 export const createPool = () => {
-  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+  const connStr = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  if (connStr && (connStr.startsWith('postgres://') || connStr.startsWith('postgresql://'))) {
     return new Pool({
-      connectionString: process.env.DATABASE_URL || process.env.POSTGRES_URL,
+      connectionString: connStr,
       max: 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 5000,
@@ -42,7 +43,8 @@ pool.on('error', (err) => {
 });
 
 // Resilient Fallback State
-let useFallbackMode = !(process.env.SQL_HOST || process.env.DATABASE_URL || process.env.POSTGRES_URL);
+const connStrForFallback = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+let useFallbackMode = !(process.env.SQL_HOST || (connStrForFallback && (connStrForFallback.startsWith('postgres://') || connStrForFallback.startsWith('postgresql://'))));
 let connectionChecked = false;
 
 async function checkConnection() {
@@ -122,6 +124,10 @@ function evaluateCondition(item: any, condition: any): boolean {
 
 const selectBuilder = {
   from: (table: any) => {
+    const fromResultPromise = (async () => {
+      const data = await readLocalJsonDb();
+      return (table === schema.employees ? data.employees : data.users) || [];
+    })();
     return {
       where: (condition: any) => {
         const resultPromise = (async () => {
@@ -145,13 +151,16 @@ const selectBuilder = {
           then: (onfulfilled: any) => resultPromise.then(onfulfilled)
         };
       },
-      then: (onfulfilled: any) => {
-        const resultPromise = (async () => {
-          const data = await readLocalJsonDb();
-          return (table === schema.employees ? data.employees : data.users) || [];
+      limit: (n: number) => {
+        const limitPromise = (async () => {
+          const list = await fromResultPromise;
+          return list.slice(0, n);
         })();
-        return resultPromise.then(onfulfilled);
-      }
+        return {
+          then: (onfulfilled: any) => limitPromise.then(onfulfilled)
+        };
+      },
+      then: (onfulfilled: any) => fromResultPromise.then(onfulfilled)
     };
   }
 };

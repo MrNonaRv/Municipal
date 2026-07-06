@@ -1,52 +1,53 @@
 const fs = require('fs');
 
-let dbCode = fs.readFileSync('src/services/db.ts', 'utf-8');
+let content = fs.readFileSync('src/db/index.ts', 'utf8');
 
-const originalFetch = `
-          const response = await fetch('/api/employees', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(item.data)
-          });
-          console.log(\`[syncOfflineData] POST response status: \${response.status} \${response.statusText}\`);
-          if (!response.ok) throw new Error(\`Server returned error status: \${response.status}\`);
-`;
-
-const chunkedFetch = `
-          const payloadStr = JSON.stringify(item.data);
-          let response;
-          if (payloadStr.length > 500000) { // If larger than 500KB, use chunking
-            console.log(\`[syncOfflineData] Payload is \${payloadStr.length} bytes, using chunked upload\`);
-            const uploadId = item.id + '-' + Date.now();
-            const CHUNK_SIZE = 500000;
-            const totalChunks = Math.ceil(payloadStr.length / CHUNK_SIZE);
-            
-            for (let i = 0; i < totalChunks; i++) {
-              const chunkData = payloadStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-              response = await fetch('/api/employees/chunk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  uploadId,
-                  chunkIndex: i,
-                  totalChunks,
-                  data: chunkData
-                })
-              });
-              if (!response.ok) {
-                 throw new Error(\`Server returned error status during chunk \${i}: \${response.status}\`);
-              }
-            }
-          } else {
-            response = await fetch('/api/employees', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: payloadStr
-            });
-            console.log(\`[syncOfflineData] POST response status: \${response.status} \${response.statusText}\`);
-            if (!response.ok) throw new Error(\`Server returned error status: \${response.status}\`);
+const replacement = `const selectBuilder = {
+  from: (table: any) => {
+    const fromResultPromise = (async () => {
+      const data = await readLocalJsonDb();
+      return (table === schema.employees ? data.employees : data.users) || [];
+    })();
+    return {
+      where: (condition: any) => {
+        const resultPromise = (async () => {
+          const data = await readLocalJsonDb();
+          let list = (table === schema.employees ? data.employees : data.users) || [];
+          if (condition) {
+            list = list.filter((item: any) => evaluateCondition(item, condition));
           }
-`;
+          return list;
+        })();
+        return {
+          limit: (n: number) => {
+            const limitPromise = (async () => {
+              const list = await resultPromise;
+              return list.slice(0, n);
+            })();
+            return {
+              then: (onfulfilled: any) => limitPromise.then(onfulfilled)
+            };
+          },
+          then: (onfulfilled: any) => resultPromise.then(onfulfilled)
+        };
+      },
+      limit: (n: number) => {
+        const limitPromise = (async () => {
+          const list = await fromResultPromise;
+          return list.slice(0, n);
+        })();
+        return {
+          then: (onfulfilled: any) => limitPromise.then(onfulfilled)
+        };
+      },
+      then: (onfulfilled: any) => fromResultPromise.then(onfulfilled)
+    };
+  }
+};`;
 
-dbCode = dbCode.replace(originalFetch, chunkedFetch);
-fs.writeFileSync('src/services/db.ts', dbCode);
+content = content.replace(
+  /const selectBuilder = \{[\s\S]*?then: \(onfulfilled: any\) => \{\s*const resultPromise = \(async \(\) => \{\s*const data = await readLocalJsonDb\(\);\s*return \(table === schema\.employees \? data\.employees : data\.users\) \|\| \[\];\s*\}\)\(\);\s*return resultPromise\.then\(onfulfilled\);\s*\}\s*\}\;\s*\}\s*\};/,
+  replacement
+);
+
+fs.writeFileSync('src/db/index.ts', content);
