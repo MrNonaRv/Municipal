@@ -7,10 +7,6 @@ import { PassThrough } from 'stream';
 import { exec } from 'child_process';
 import os from 'os';
 import dotenv from 'dotenv';
-
-dotenv.config();
-console.log('[DEBUG] Server DATABASE_URL:', process.env.DATABASE_URL);
-
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { google } from 'googleapis';
@@ -18,7 +14,7 @@ import initialDatabase from './database.json';
 // @ts-ignore
 import firebaseConfig from './firebase-applet-config.json';
 
-import { db, isFallbackActive, getLocalDbPath, checkConnection, pool } from './src/db/index.ts';
+import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
 import { employees } from './src/db/schema.ts';
 import { getOrCreateUser } from './src/db/users.ts';
 import { eq } from 'drizzle-orm';
@@ -26,6 +22,8 @@ import { eq } from 'drizzle-orm';
 async function getDummyUser() {
   return await getOrCreateUser('dummy_desktop_user', 'desktop_user@local');
 }
+
+dotenv.config();
 
 let currentDirname = '';
 try {
@@ -153,28 +151,24 @@ async function loadGDriveConfig() {
       // Local file not found or corrupted
     }
 
-    // Try Postgres if available
-    if (!isFallbackActive()) {
-      try {
-        const client = await pool.connect();
-        const res = await client.query("SELECT value FROM system_configs WHERE key = 'google_drive_config'");
-        if (res.rows.length > 0) {
-           const data = res.rows[0].value;
-           sharedDriveConfig = {
-             accessToken: data.accessToken || null,
-             user: data.user || null,
-             storageProvider: data.storageProvider || null
-           };
-           console.log('[Google Drive Config] Restored configuration from PostgreSQL:', sharedDriveConfig?.user?.email);
-           // Sync back to local file
-           await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(sharedDriveConfig, null, 2), 'utf-8');
-        } else if (sharedDriveConfig) {
-           console.log('[Google Drive Config] Seeding PostgreSQL with local configuration...');
-           await client.query("INSERT INTO system_configs (key, value) VALUES ($1, $2)", ['google_drive_config', JSON.stringify(sharedDriveConfig)]);
-        }
-        client.release();
-      } catch(e) {
-         console.log('[Google Drive Config] Error with PostgreSQL:', e);
+    // Try Firestore if available (Firestore is master)
+    if (firestoreDb) {
+      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        sharedDriveConfig = {
+          accessToken: data.accessToken || null,
+          user: data.user || null,
+          storageProvider: data.storageProvider || null
+        };
+        console.log('[Google Drive Config] Restored configuration from Firestore:', sharedDriveConfig?.user?.email);
+        // Sync back to local file
+        await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(sharedDriveConfig, null, 2), 'utf-8');
+      } else if (sharedDriveConfig) {
+        // If Firestore doc doesn't exist but local file does, seed Firestore
+        console.log('[Google Drive Config] Seeding Firestore with local configuration...');
+        await setDoc(docRef, sharedDriveConfig);
       }
     }
   } catch (err) {
@@ -187,17 +181,9 @@ async function saveGDriveConfig(config: any) {
   sharedDriveConfig = config;
   try {
     await fs.writeFile(GDRIVE_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
-    if (!isFallbackActive()) {
-      try {
-        const client = await pool.connect();
-        await client.query(
-          "INSERT INTO system_configs (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-          ['google_drive_config', JSON.stringify(config)]
-        );
-        client.release();
-      } catch (e) {
-        console.log('[Google Drive Config] Error saving to PostgreSQL:', e);
-      }
+    if (firestoreDb) {
+      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
+      await setDoc(docRef, config);
     }
     console.log('[Google Drive Config] Saved shared configuration:', config?.user?.email);
   } catch (err) {
@@ -212,14 +198,9 @@ async function deleteGDriveConfig() {
     try {
       await fs.unlink(GDRIVE_CONFIG_FILE);
     } catch (e) {}
-    if (!isFallbackActive()) {
-      try {
-        const client = await pool.connect();
-        await client.query("DELETE FROM system_configs WHERE key = 'google_drive_config'");
-        client.release();
-      } catch (e) {
-        console.log('[Google Drive Config] Error deleting from PostgreSQL:', e);
-      }
+    if (firestoreDb) {
+      const docRef = doc(firestoreDb, 'system_sync', 'google_drive_config');
+      await deleteDoc(docRef);
     }
     console.log('[Google Drive Config] Deleted shared configuration');
   } catch (err) {
@@ -269,7 +250,7 @@ async function loadDb() {
   }
 
   // Now, try loading from Firestore (if initialized)
-  if (false) { // Disabled Firestore sync
+  if (firestoreDb) {
     try {
       console.log('[Firebase] Loading records from Firestore "app_data" collection...');
       const querySnapshot = await getDocs(collection(firestoreDb, 'app_data'));
@@ -409,7 +390,7 @@ async function seedRealEmployeesIfNeeded() {
         console.log(`[Seed] Successfully seeded ${recordsToSeed.length} real employee records.`);
         
         // Sync the newly seeded records to Firestore immediately
-        // // await syncDrizzleToFirestore();
+        await syncDrizzleToFirestore();
       } else {
         console.log('[Seed] No matching employee records found in database.json.');
       }
@@ -422,7 +403,7 @@ async function seedRealEmployeesIfNeeded() {
 }
 
 async function syncDrizzleToFirestore() {
-  return; // Disabled Firestore sync
+  if (!isFallbackActive() || !firestoreDb) return;
   
   try {
     const localDbPath = getLocalDbPath();
@@ -461,7 +442,7 @@ async function syncDrizzleToFirestore() {
 }
 
 async function loadDrizzleFromFirestore() {
-  return; // Disabled Firestore sync
+  if (!isFallbackActive() || !firestoreDb) return;
   
   try {
     console.log('[Firebase] Attempting to restore Drizzle local database from Firestore...');
@@ -498,26 +479,8 @@ async function loadDrizzleFromFirestore() {
 }
 
 let isInitializing = false;
-let lastFirestoreLoadTime = 0;
-const FIREBASE_SYNC_INTERVAL_MS = 10000; // 10 seconds cache invalidation for warm Vercel serverless instances
 
 async function ensureDbLoaded() {
-  const now = Date.now();
-  
-  // 1. Establish/verify database connections (PostgreSQL/Supabase or local JSON mode setup)
-  await checkConnection();
-
-  // 2. If already loaded, and we are running in local/fallback JSON file database mode on Vercel,
-  // we regularly sync from Firestore to pull changes from other active/warm serverless instances or devices.
-  if (dbLoaded && isFallbackActive()) {
-    if (now - lastFirestoreLoadTime > FIREBASE_SYNC_INTERVAL_MS) {
-      console.log('[Firebase] Warm serverless instance: checking and updating local cache from Firestore...');
-      await loadDrizzleFromFirestore();
-      lastFirestoreLoadTime = now;
-    }
-    return;
-  }
-
   if (dbLoaded) return;
   
   if (isInitializing) {
@@ -533,7 +496,6 @@ async function ensureDbLoaded() {
     await initFirebase();
     // Restore Drizzle fallback from Firestore BEFORE seeding or other operations
     await loadDrizzleFromFirestore();
-    lastFirestoreLoadTime = Date.now();
     
     await loadDb(); // Old sync system
     await seedRealEmployeesIfNeeded();
@@ -543,7 +505,7 @@ async function ensureDbLoaded() {
     // If we are in AI Studio, ensure our local state is pushed to Firestore
     if (!process.env.VERCEL) {
       console.log('[DB] Running in AI Studio, triggering proactive sync to Firestore...');
-      // await syncDrizzleToFirestore();
+      await syncDrizzleToFirestore();
     }
   } catch (err) {
     console.error('[DB] Critical error during database initialization:', err);
@@ -589,7 +551,7 @@ app.get('/api/debug/db-status', async (req, res) => {
     const stats = await fs.stat(localDbPath).catch(() => null);
     
     let firestoreStatus = 'not_initialized';
-    if (false) { // Disabled Firestore sync
+    if (firestoreDb) {
       const docSnap = await getDoc(doc(firestoreDb, 'system_sync', 'drizzle_local_db'));
       firestoreStatus = docSnap.exists() ? 'exists' : 'missing';
     }
@@ -610,7 +572,6 @@ app.get('/api/debug/db-status', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 app.get('/health', (req, res) => {
   res.status(200).send('OK');
@@ -1005,7 +966,7 @@ app.post('/api/employees/chunk', async (req, res) => {
         });
       }
       
-      // await syncDrizzleToFirestore();
+      await syncDrizzleToFirestore();
       return res.json({ success: true, completed: true });
     } else {
       return res.json({ success: true, completed: false, received: receivedCount });
@@ -1118,7 +1079,7 @@ app.post('/api/employees', async (req, res) => {
       });
     }
 
-    // await syncDrizzleToFirestore();
+    await syncDrizzleToFirestore();
     res.json({ success: true });
   } catch (error: any) {
     console.error(error);
@@ -1135,7 +1096,7 @@ app.delete('/api/employees/:id', async (req, res) => {
     const id = req.params.id;
     await db.delete(employees).where(eq(employees.originalId, id));
 
-    // await syncDrizzleToFirestore();
+    await syncDrizzleToFirestore();
     res.json({ success: true });
   } catch (error: any) {
     console.error(error);
@@ -1152,7 +1113,7 @@ app.post('/api/employees/clear-all', async (req, res) => {
     const dummyUser = await getDummyUser();
     await db.delete(employees).where(eq(employees.userId, dummyUser.id));
 
-    // await syncDrizzleToFirestore();
+    await syncDrizzleToFirestore();
     res.json({ success: true });
   } catch (error: any) {
     console.error('Failed to clear all data:', error);

@@ -640,11 +640,6 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
                         <AlertTriangle size={14} /> Connection Error
                       </div>
                       <p>{error}</p>
-                      {error.includes('blocked or closed') && (
-                        <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
-                          <strong>Preview Note:</strong> If you are using this app inside a preview window, popups are often blocked. Please open the app in a <strong>new browser tab</strong> and try signing in again.
-                        </div>
-                      )}
                       {error.includes('unauthorized-domain') && (
                         <div className="bg-white p-2 rounded border border-rose-200 text-[9px] text-slate-600">
                           <strong>Action Required:</strong> You must add <code>{window.location.hostname}</code> to the <strong>Authorized domains</strong> list in your <a href={`https://console.firebase.google.com/u/0/project/hr-main-datastorage-mam/authentication/settings`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">Firebase Console</a>.

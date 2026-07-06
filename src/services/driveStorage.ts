@@ -115,8 +115,8 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
   } catch (error: any) {
     isSigningIn = false;
     console.error('Sign in error:', error);
-    if (error.code === 'auth/popup-blocked' || error.code === 'auth/popup-closed-by-user') {
-      throw new Error('Sign-in popup was blocked or closed. If you are previewing this app, please open it in a new tab to sign in.');
+    if (error.code === 'auth/popup-blocked') {
+      throw new Error('Sign-in popup was blocked. Please allow popups for this site.');
     }
     if (error.code === 'auth/unauthorized-domain') {
       throw new Error('This domain is not authorized in Firebase Console (Auth > Settings > Authorized Domains).');
