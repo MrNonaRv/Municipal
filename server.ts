@@ -11,9 +11,9 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { google } from 'googleapis';
 
-import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
-import { employees } from './src/db/schema.ts';
-import { getOrCreateUser } from './src/db/users.ts';
+import { db, isFallbackActive, getLocalDbPath } from './src/db/index';
+import { employees } from './src/db/schema';
+import { getOrCreateUser } from './src/db/users';
 import { loadGDriveConfig, setupDriveRoutes } from "./src/api/drive.ts";
 import { eq } from 'drizzle-orm';
 
@@ -483,16 +483,18 @@ app.use(async (req, res, next) => {
 app.get('/api/sync-diagnostic', async (req, res) => {
   let dbHost = 'unknown';
   let dbSource = 'none';
-  const { isFallbackActive } = require('./src/db/index.ts');
+  
   
   const pgUrl = process.env.POSTGRES_URL;
   const dbUrl = process.env.DATABASE_URL;
   
   let fallbackUrl = null;
   try {
-    const configPath = require('path').join(process.cwd(), 'firebase-applet-config.json');
-    if (require('fs').existsSync(configPath)) {
-      const config = JSON.parse(require('fs').readFileSync(configPath, 'utf8'));
+    
+    
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if ((await fs.stat(configPath).then(() => true).catch(() => false))) {
+      const config = JSON.parse((await fs.readFile(configPath, 'utf8')));
       fallbackUrl = config.POSTGRES_URL;
     }
   } catch(e) {}
