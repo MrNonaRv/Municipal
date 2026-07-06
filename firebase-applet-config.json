@@ -5,5 +5,6 @@
   "storageBucket": "hr-main-datastorage-mam.firebasestorage.app",
   "messagingSenderId": "255554692341",
   "appId": "1:255554692341:web:e0d00c331ae36f337411bc",
-  "measurementId": "G-72QRSBTJG6"
+  "measurementId": "G-72QRSBTJG6",
+  "POSTGRES_URL": "postgresql://postgres.oxtjlhcwibieeuwbhnyj:Olanoko_1529@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres"
 }

@@ -4,8 +4,43 @@ import * as schema from './schema.ts';
 import fs from 'fs/promises';
 import path from 'path';
 
+let globalFallbackPostgresUrl = null;
+try {
+  const fs = require('fs');
+  const path = require('path');
+  let configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (!fs.existsSync(configPath)) {
+    configPath = path.join(process.cwd(), '..', 'firebase-applet-config.json');
+  }
+  if (!fs.existsSync(configPath) && typeof __dirname !== 'undefined') {
+    configPath = path.join(__dirname, '..', 'firebase-applet-config.json');
+  }
+  if (fs.existsSync(configPath)) {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    if (config.POSTGRES_URL) {
+      globalFallbackPostgresUrl = config.POSTGRES_URL;
+    }
+  }
+} catch (e) {
+  console.warn("Could not read postgres url from firebase config", e);
+}
+
 export const createPool = () => {
-  const connStr = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+  let fallbackPostgresUrl = globalFallbackPostgresUrl;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+    if (fs.existsSync(configPath)) {
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (config.POSTGRES_URL) {
+        fallbackPostgresUrl = config.POSTGRES_URL;
+      }
+    }
+  } catch (e) {
+    console.warn("Could not read postgres url from firebase config", e);
+  }
+  const connStr = process.env.POSTGRES_URL || process.env.DATABASE_URL || fallbackPostgresUrl;
   if (connStr && (connStr.startsWith('postgres://') || connStr.startsWith('postgresql://'))) {
     return new Pool({
       connectionString: connStr,
@@ -43,7 +78,7 @@ pool.on('error', (err) => {
 });
 
 // Resilient Fallback State
-const connStrForFallback = process.env.POSTGRES_URL || process.env.DATABASE_URL;
+const connStrForFallback = process.env.POSTGRES_URL || process.env.DATABASE_URL || globalFallbackPostgresUrl;
 let useFallbackMode = !(process.env.SQL_HOST || (connStrForFallback && (connStrForFallback.startsWith('postgres://') || connStrForFallback.startsWith('postgresql://'))));
 let connectionChecked = false;
 
