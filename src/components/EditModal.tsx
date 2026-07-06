@@ -323,7 +323,19 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     }
   };
 
-  const handleRemoveAttachment = (id: string) => {
+  const handleRemoveAttachment = async (id: string) => {
+    // Find the attachment first to check if it's on Drive
+    const docToRemove = formData.attachments?.find(item => item.id === id);
+    if (docToRemove?.driveFileId) {
+      try {
+        await deleteFileFromDrive(docToRemove.driveFileId);
+        console.log('Successfully deleted file from Google Drive:', docToRemove.driveFileId);
+      } catch (err) {
+        console.error('Failed to delete file from Google Drive:', err);
+        // Continue to delete locally even if Drive deletion fails
+      }
+    }
+
     setFormData(prev => ({
       ...prev,
       attachments: (prev.attachments || []).filter(item => item.id !== id)
@@ -345,53 +357,20 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     return () => clearTimeout(timer);
   }, [formData]);
 
-  const validateField = (name: string, value: any) => {
-    let errorMsg = '';
-    const requiredFields = [
-      'surname', 'firstName'
-    ];
-    
-    if (requiredFields.includes(name)) {
-      if (!value || !value.trim()) errorMsg = 'This field is required';
-    }
 
-    switch (name) {
-    }
-    setValidationErrors(prev => ({ ...prev, [name]: errorMsg }));
-    return errorMsg;
-  };
-
-  const tabs = [
-    { id: 'service', label: 'Service Record', icon: Briefcase },
-    { id: 'attachments', label: 'Scanned Documents', icon: FileText },
-  ] as const;
 
   const handleSaveClick = async () => {
-    // Validate all fields before saving
-    const fieldsToValidate = [
-      'surname', 'firstName'
-    ];
+    const hasErrors = Object.values(validationErrors).some(err => err !== '');
+    const requiredFields = ['surname', 'firstName'];
+    const missingFields = requiredFields.filter(field => !formData[field as keyof Employee]);
     
-    const newErrors: Record<string, string> = {};
-    let hasErrors = false;
-    
-    fieldsToValidate.forEach(field => {
-      const errorMsg = validateField(field, (formData as any)[field]);
-      if (errorMsg) {
-        hasErrors = true;
-        newErrors[field] = errorMsg;
-      }
-    });
-
-    setValidationErrors(newErrors);
-
-    if (hasErrors) {
-      setError("Please correct the errors before saving.");
+    if (hasErrors || missingFields.length > 0) {
+      setError('Please fix all validation errors before saving.');
       return;
     }
 
-    // Auto-capture selected scanned document if user forgot to click "+ Add Document"
-    let finalFormData = { ...formData };
+    let finalFormData = formData;
+
     if (selectedFile && newDocName.trim()) {
       setIsUploadingToDrive(true);
       setError("Uploading selected document attachment...");
@@ -496,6 +475,16 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     onSave(finalFormData);
   };
 
+  const validateField = (name: string, value: any) => {
+    let errorMsg = '';
+    const requiredFields = ['surname', 'firstName'];
+    
+    if (requiredFields.includes(name)) {
+      if (!value || !value.trim()) errorMsg = 'This field is required';
+    }
+    return errorMsg;
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
@@ -548,6 +537,11 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
 
 
 
+
+  const tabs: { id: 'service' | 'attachments', label: string, icon: any }[] = [
+    { id: 'service', label: 'Service Record', icon: Briefcase },
+    { id: 'attachments', label: 'Scanned Documents', icon: FileText }
+  ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm md:p-4" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">

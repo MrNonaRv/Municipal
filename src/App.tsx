@@ -101,7 +101,7 @@ export default function App() {
 
     // Initial sync check: if we have local changes, try to sync immediately
     const checkInitialSync = async () => {
-      const pending = getSyncQueue().length;
+      const pending = (await getSyncQueue()).length;
       setSyncQueueCount(pending);
       if (pending > 0 && getWorkMode() !== 'local') {
         const reachable = await checkServerConnection();
@@ -181,7 +181,7 @@ export default function App() {
     };
 
     const handleSyncStatusChange = () => {
-      setSyncQueueCount(getSyncQueue().length);
+      getSyncQueue().then(q => setSyncQueueCount(q.length));
     };
 
     const handleDataSynced = (e: any) => {
@@ -194,7 +194,7 @@ export default function App() {
       const newMode = e.detail;
       setWorkModeState(newMode);
       if (newMode !== 'local') {
-        checkServerConnection().then(reachable => {
+        checkServerConnection().then(async reachable => {
           setIsOnlineState(navigator.onLine);
           if (navigator.onLine && reachable) {
             triggerSync();
@@ -239,7 +239,7 @@ export default function App() {
         setIsOnlineState(isOnline());
 
         if (mode === 'auto') {
-          const pendingItems = getSyncQueue().length;
+          const pendingItems = (await getSyncQueue()).length;
           const syncing = getIsSyncing();
 
           if (nowReachable && !wasReachable) {
@@ -255,10 +255,10 @@ export default function App() {
     }, 5000);
 
     // Initial check
-    setSyncQueueCount(getSyncQueue().length);
-    checkServerConnection().then(reachable => {
+    getSyncQueue().then(q => setSyncQueueCount(q.length));
+    checkServerConnection().then(async reachable => {
       setIsOnlineState(isOnline());
-      if (getWorkMode() !== 'local' && navigator.onLine && reachable && getSyncQueue().length > 0) {
+      if (getWorkMode() !== 'local' && navigator.onLine && reachable && (await getSyncQueue()).length > 0) {
         triggerSync();
       }
     });
@@ -399,7 +399,7 @@ export default function App() {
                   <button 
                     onClick={() => {
                       addToast('Checking server connection...', 'info');
-                      checkServerConnection().then(reachable => {
+                      checkServerConnection().then(async reachable => {
                         setIsOnlineState(isOnline());
                         if (reachable) addToast('Server reconnected!', 'success');
                         else addToast('Server still unreachable. Check your internet or server status.', 'error');

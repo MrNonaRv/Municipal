@@ -1,4 +1,5 @@
 import { Employee } from '../types/employee';
+import { get, set, del } from 'idb-keyval';
 
 // Cache keys
 const CACHE_KEY = 'gers_employees_cache';
@@ -65,7 +66,7 @@ export const checkServerConnection = async (retries = 2): Promise<boolean> => {
     if (success) {
       const wasReachable = lastServerReachable;
       setServerReachable(true);
-      const pendingCount = getSyncQueue().length;
+      const pendingCount = (await getSyncQueue()).length;
       if (!wasReachable && pendingCount > 0) {
         window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
       }
@@ -97,67 +98,92 @@ export interface SyncItem {
 
 const PARKED_KEY = 'gers_parked_sync_items';
 
-export const getParkedItems = (): SyncItem[] => {
+export const getParkedItems = async (): Promise<SyncItem[]> => {
   try {
-    const raw = localStorage.getItem(PARKED_KEY);
+    const raw = await get(PARKED_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
     return parsed;
   } catch (e) {
+    try {
+      const fallback = localStorage.getItem(PARKED_KEY);
+      if (fallback) {
+        const parsed = JSON.parse(fallback);
+        await set(PARKED_KEY, fallback);
+        localStorage.removeItem(PARKED_KEY);
+        return parsed;
+      }
+    } catch(err) {}
     console.error('[getParkedItems] Failed to parse parked items', e);
     return [];
   }
 };
 
-export const saveParkedItems = (items: SyncItem[]): void => {
+export const saveParkedItems = async (items: SyncItem[]): Promise<void> => {
   try {
-    localStorage.setItem(PARKED_KEY, JSON.stringify(items));
+    await set(PARKED_KEY, JSON.stringify(items));
+    window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
   } catch (e) {
     console.error('[saveParkedItems] Failed to save parked items', e);
   }
 };
 
-export const parkSyncItem = (item: SyncItem): void => {
+export const parkSyncItem = async (item: SyncItem): Promise<void> => {
   console.log(`[parkSyncItem] Parking stuck item ID=${item.id}, Type=${item.type} due to repeated failures.`);
-  const items = getParkedItems();
+  const items = await getParkedItems();
   if (!items.some(i => i.id === item.id && i.timestamp === item.timestamp)) {
     items.push(item);
-    saveParkedItems(items);
+    await saveParkedItems(items);
   }
 };
 
 // Helper to get local cache
-export const getLocalCache = (): Employee[] => {
+export const getLocalCache = async (): Promise<Employee[]> => {
   try {
-    const raw = localStorage.getItem(CACHE_KEY);
+    const raw = await get(CACHE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    console.log(`[getLocalCache] Loaded ${parsed.length} employees from local storage.`);
+    console.log(`[getLocalCache] Loaded ${parsed.length} employees from idb.`);
     return parsed;
   } catch (e) {
+    try {
+      const fallback = localStorage.getItem(CACHE_KEY);
+      if (fallback) {
+        const parsed = JSON.parse(fallback);
+        await set(CACHE_KEY, fallback);
+        await del(CACHE_KEY);
+        return parsed;
+      }
+    } catch(err) {}
     console.error('[getLocalCache] Failed to parse local employee cache', e);
     return [];
   }
 };
 
 // Helper to save local cache
-export const saveLocalCache = (employees: Employee[]): void => {
+export const saveLocalCache = async (employees: Employee[]): Promise<void> => {
   try {
-    console.log(`[saveLocalCache] Saving ${employees.length} employees to local storage.`);
-    localStorage.setItem(CACHE_KEY, JSON.stringify(employees));
+    console.log(`[saveLocalCache] Saving ${employees.length} employees to idb.`);
+    await set(CACHE_KEY, JSON.stringify(employees));
   } catch (e) {
     console.error('[saveLocalCache] Failed to save local employee cache', e);
   }
 };
 
 // Helper to get sync queue
-export const getSyncQueue = (): SyncItem[] => {
+export const getSyncQueue = async (): Promise<SyncItem[]> => {
   try {
-    const raw = localStorage.getItem(QUEUE_KEY);
+    const raw = await get(QUEUE_KEY);
     const parsed = raw ? JSON.parse(raw) : [];
-    if (parsed.length > 0) {
-      console.log(`[getSyncQueue] Found ${parsed.length} pending items in the sync queue.`);
-    }
     return parsed;
   } catch (e) {
+    try {
+      const fallback = localStorage.getItem(QUEUE_KEY);
+      if (fallback) {
+        const parsed = JSON.parse(fallback);
+        await set(QUEUE_KEY, fallback);
+        localStorage.removeItem(QUEUE_KEY);
+        return parsed;
+      }
+    } catch(err) {}
     console.error('[getSyncQueue] Failed to parse sync queue', e);
     return [];
   }
@@ -174,9 +200,9 @@ export const saveSyncQueue = (queue: SyncItem[]): void => {
 };
 
 // Add to sync queue (merging duplicates)
-export const addToSyncQueue = (item: Omit<SyncItem, 'timestamp'>): void => {
+export const addToSyncQueue = async (item: Omit<SyncItem, 'timestamp'>): Promise<void> => {
   console.log(`[addToSyncQueue] Queueing item: ID=${item.id}, Type=${item.type}`);
-  const queue = getSyncQueue();
+  const queue = await getSyncQueue();
   const existingIdx = queue.findIndex(q => q.id === item.id);
   const newItem = { ...item, timestamp: Date.now() };
 
@@ -187,16 +213,16 @@ export const addToSyncQueue = (item: Omit<SyncItem, 'timestamp'>): void => {
     console.log(`[addToSyncQueue] Adding new item for ID=${item.id} to queue.`);
     queue.push(newItem);
   }
-  saveSyncQueue(queue);
+  await saveSyncQueue(queue);
   
   // Dispatch custom event to notify UI
   window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
 };
 
-export const removeFromSyncQueue = (id: string): void => {
+export const removeFromSyncQueue = async (id: string): Promise<void> => {
   console.log(`[removeFromSyncQueue] Removing ID=${id} from sync queue.`);
-  const queue = getSyncQueue().filter(q => q.id !== id);
-  saveSyncQueue(queue);
+  const queue = (await getSyncQueue()).filter(q => q.id !== id);
+  await saveSyncQueue(queue);
   window.dispatchEvent(new CustomEvent('gers_sync_status_change'));
 };
 
@@ -430,7 +456,7 @@ export const syncOfflineData = async (
   
   if (mode === 'local') {
     console.log('[syncOfflineData] WorkMode is "local". Skipping sync processing.');
-    if (onProgress) onProgress('success', getSyncQueue().length);
+    if (onProgress) onProgress('success', (await getSyncQueue()).length);
     return;
   }
   if (isSyncing) {
@@ -443,7 +469,7 @@ export const syncOfflineData = async (
     syncRetryTimeout = null;
   }
 
-  const queue = getSyncQueue();
+  const queue = await getSyncQueue();
   if (queue.length === 0) {
     console.log('[syncOfflineData] Sync queue is empty. Nothing to sync.');
     if (onProgress) onProgress('success', 0);
@@ -546,7 +572,7 @@ export const syncOfflineData = async (
 
         if (item.retryCount >= 5) {
           console.error(`[syncOfflineData] Item ${item.id} reached maximum individual retries (5). Parking it to prevent blocking.`);
-          parkSyncItem(item);
+          await parkSyncItem(item);
           addSyncHistoryEvent({
             type: 'SYNC_ITEM_ERROR',
             message: `Permanently failed to sync item: ${item.type} for ${item.id} (Max retries reached). Item parked.`,
@@ -620,7 +646,7 @@ export const syncOfflineData = async (
           if (contentType && contentType.includes('application/json')) {
             const latestData = await latestResponse.json();
             console.log(`[syncOfflineData] Successfully refreshed cache with ${latestData.length} records.`);
-            saveLocalCache(latestData);
+            await saveLocalCache(latestData);
             setServerReachable(true);
             window.dispatchEvent(new CustomEvent('gers_data_synced', { detail: latestData }));
           } else {
@@ -664,7 +690,7 @@ export const dbGetAll = async (): Promise<Employee[]> => {
   
   if (mode === 'local' || !online) {
     console.log(`[dbGetAll] Mode: ${mode}, Online: ${online}. Returning local cache.`);
-    return getLocalCache();
+    return await getLocalCache();
   }
   
   try {
@@ -673,20 +699,20 @@ export const dbGetAll = async (): Promise<Employee[]> => {
       const contentType = response.headers.get('content-type');
       if (contentType && contentType.includes('application/json')) {
         const data = await response.json();
-        saveLocalCache(data);
+        await saveLocalCache(data);
         setServerReachable(true);
         return data;
       } else {
         console.warn(`[dbGetAll] Server returned non-JSON response (likely HTML during restart). Using cache.`);
-        return getLocalCache();
+        return await getLocalCache();
       }
     }
     console.warn(`[dbGetAll] Server returned non-OK status: ${response.status}. Using cache.`);
-    return getLocalCache();
+    return await getLocalCache();
   } catch (error) {
     console.error('[dbGetAll] Fetch failed. Using cache.', error);
     setServerReachable(false);
-    return getLocalCache();
+    return await getLocalCache();
   }
 };
 
@@ -694,7 +720,7 @@ export const dbPut = async (emp: Employee): Promise<void> => {
   console.log(`[dbPut] Saving employee ID=${emp.id} (${emp.surname || ''}, ${emp.firstName || ''}).`);
   
   // Update local cache immediately
-  const cache = getLocalCache();
+  const cache = await getLocalCache();
   const idx = cache.findIndex(e => e.id === emp.id);
   const oldEmp = idx >= 0 ? cache[idx] : undefined;
   
@@ -716,19 +742,19 @@ export const dbPut = async (emp: Employee): Promise<void> => {
     console.log('[dbPut] Adding new employee to local cache.');
     cache.push(emp);
   }
-  saveLocalCache(cache);
+  await saveLocalCache(cache);
 
   const mode = getWorkMode();
   const online = navigator.onLine;
   
   if (mode === 'local') {
     console.log('[dbPut] Mode is "local". Adding to sync queue.');
-    addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
+    await addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
     return;
   }
   if (mode === 'auto' && (!online || !lastServerReachable)) {
     console.warn(`[dbPut] Offline state detected (online: ${online}, reachable: ${lastServerReachable}). Queueing update.`);
-    addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
+    await addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
     return;
   }
 
@@ -769,8 +795,8 @@ export const dbPut = async (emp: Employee): Promise<void> => {
     console.log(`[dbPut] Response status: ${response.status} ${response.statusText}`);
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
     setServerReachable(true);
-    removeFromSyncQueue(emp.id);
-    if (getSyncQueue().length > 0) {
+    await removeFromSyncQueue(emp.id);
+    if ((await getSyncQueue()).length > 0) {
       console.log('[dbPut] Sync queue has pending items. Triggering syncOfflineData.');
       window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
     }
@@ -780,7 +806,7 @@ export const dbPut = async (emp: Employee): Promise<void> => {
       console.log('[dbPut] Marking server unreachable due to save failure.');
       setServerReachable(false);
     }
-    addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
+    await addToSyncQueue({ id: emp.id, type: 'PUT', data: emp });
     window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
   }
 };
@@ -788,7 +814,7 @@ export const dbPut = async (emp: Employee): Promise<void> => {
 export const dbDelete = async (id: string): Promise<void> => {
   console.log(`[dbDelete] Deleting employee ID=${id}.`);
   
-  const oldCache = getLocalCache();
+  const oldCache = await getLocalCache();
   const emp = oldCache.find(e => e.id === id);
   const fullName = emp ? `${emp.firstName || ''} ${emp.surname || ''}`.trim() : 'Unknown Employee';
   
@@ -804,19 +830,19 @@ export const dbDelete = async (id: string): Promise<void> => {
   // Update local cache immediately
   const cache = oldCache.filter(e => e.id !== id);
   console.log(`[dbDelete] Removed from local cache. New cache count: ${cache.length}`);
-  saveLocalCache(cache);
+  await saveLocalCache(cache);
 
   const mode = getWorkMode();
   const online = navigator.onLine;
   
   if (mode === 'local') {
     console.log('[dbDelete] Mode is "local". Adding DELETE to sync queue.');
-    addToSyncQueue({ id, type: 'DELETE' });
+    await addToSyncQueue({ id, type: 'DELETE' });
     return;
   }
   if (mode === 'auto' && (!online || !lastServerReachable)) {
     console.warn(`[dbDelete] Offline state detected (online: ${online}, reachable: ${lastServerReachable}). Queueing delete.`);
-    addToSyncQueue({ id, type: 'DELETE' });
+    await addToSyncQueue({ id, type: 'DELETE' });
     return;
   }
 
@@ -828,8 +854,8 @@ export const dbDelete = async (id: string): Promise<void> => {
     console.log(`[dbDelete] Response status: ${response.status} ${response.statusText}`);
     if (!response.ok) throw new Error(`HTTP Error: ${response.status}`);
     setServerReachable(true);
-    removeFromSyncQueue(id);
-    if (getSyncQueue().length > 0) {
+    await removeFromSyncQueue(id);
+    if ((await getSyncQueue()).length > 0) {
       console.log('[dbDelete] Sync queue has pending items. Triggering syncOfflineData.');
       window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
     }
@@ -839,7 +865,7 @@ export const dbDelete = async (id: string): Promise<void> => {
       console.log('[dbDelete] Marking server unreachable due to delete failure.');
       setServerReachable(false);
     }
-    addToSyncQueue({ id, type: 'DELETE' });
+    await addToSyncQueue({ id, type: 'DELETE' });
     window.dispatchEvent(new CustomEvent('gers_trigger_sync'));
   }
 };
@@ -857,7 +883,7 @@ export const dbClearAll = async (): Promise<void> => {
   });
 
   // Clear local storage cache
-  localStorage.removeItem(CACHE_KEY);
+  await del(CACHE_KEY);
   localStorage.removeItem(QUEUE_KEY);
   
   // Mark system as cleared so we don't auto-seed
