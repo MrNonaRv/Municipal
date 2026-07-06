@@ -4,43 +4,11 @@ import * as schema from './schema.ts';
 import fs from 'fs/promises';
 import path from 'path';
 
-let globalFallbackPostgresUrl = null;
-try {
-  const fs = require('fs');
-  const path = require('path');
-  let configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-  if (!fs.existsSync(configPath)) {
-    configPath = path.join(process.cwd(), '..', 'firebase-applet-config.json');
-  }
-  if (!fs.existsSync(configPath) && typeof __dirname !== 'undefined') {
-    configPath = path.join(__dirname, '..', 'firebase-applet-config.json');
-  }
-  if (fs.existsSync(configPath)) {
-    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    if (config.POSTGRES_URL) {
-      globalFallbackPostgresUrl = config.POSTGRES_URL;
-    }
-  }
-} catch (e) {
-  console.warn("Could not read postgres url from firebase config", e);
-}
+// Hardcoded Supabase connection string as requested
+const SUPABASE_URL = "postgresql://postgres.oxtjlhcwibieeuwbhnyj:Olanoko_1529@aws-1-ap-southeast-1.pooler.supabase.com:6543/postgres";
 
 export const createPool = () => {
-  let fallbackPostgresUrl = globalFallbackPostgresUrl;
-  try {
-    const fs = require('fs');
-    const path = require('path');
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (fs.existsSync(configPath)) {
-      const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-      if (config.POSTGRES_URL) {
-        fallbackPostgresUrl = config.POSTGRES_URL;
-      }
-    }
-  } catch (e) {
-    console.warn("Could not read postgres url from firebase config", e);
-  }
-  const connStr = process.env.POSTGRES_URL || process.env.DATABASE_URL || fallbackPostgresUrl;
+  const connStr = SUPABASE_URL;
   if (connStr && (connStr.startsWith('postgres://') || connStr.startsWith('postgresql://'))) {
     return new Pool({
       connectionString: connStr,
@@ -78,8 +46,8 @@ pool.on('error', (err) => {
 });
 
 // Resilient Fallback State
-const connStrForFallback = process.env.POSTGRES_URL || process.env.DATABASE_URL || globalFallbackPostgresUrl;
-let useFallbackMode = !(process.env.SQL_HOST || (connStrForFallback && (connStrForFallback.startsWith('postgres://') || connStrForFallback.startsWith('postgresql://'))));
+const connStrForFallback = SUPABASE_URL;
+let useFallbackMode = false;
 let connectionChecked = false;
 
 async function checkConnection() {
@@ -92,7 +60,7 @@ async function checkConnection() {
     connectionChecked = true;
   } catch (err: any) {
     console.warn('[DB] Failed to connect to PostgreSQL database. Falling back to local JSON database.', err.message);
-    useFallbackMode = true;
+    /* useFallbackMode disabled */
     connectionChecked = true;
   }
 }
