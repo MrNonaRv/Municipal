@@ -75,10 +75,12 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     
     window.addEventListener('online', updateDest);
     window.addEventListener('offline', updateDest);
+    window.addEventListener('gers_drive_status_changed', updateDest);
     
     return () => {
       window.removeEventListener('online', updateDest);
       window.removeEventListener('offline', updateDest);
+      window.removeEventListener('gers_drive_status_changed', updateDest);
     };
   }, [activeTab]);
 
@@ -152,7 +154,30 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
             if (fileInputRef.current) fileInputRef.current.value = '';
           } catch (uploadErr: any) {
             console.error("Auto background sync failed", uploadErr);
-            setError(`Background sync failed: ${uploadErr.message || uploadErr}. You can try adding manually.`);
+            setError(`Background sync failed: ${uploadErr.message || uploadErr}. Saved locally instead.`);
+            
+            if (base64) {
+              const localAttachment: Attachment = {
+                id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+                name: docName.trim(),
+                fileName: autoFileName,
+                fileType: file.type,
+                fileData: base64,
+                uploadedAt: new Date().toISOString()
+              };
+
+              const updatedFormData = {
+                ...formData,
+                attachments: [...(formData.attachments || []), localAttachment]
+              };
+              setFormData(updatedFormData);
+              onSave(updatedFormData, true);
+              
+              setNewDocName('');
+              setSelectedFile(null);
+              setSelectedFileData(null);
+              if (fileInputRef.current) fileInputRef.current.value = '';
+            }
           } finally {
             setIsUploadingToDrive(false);
           }
@@ -221,7 +246,28 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         if (fileInputRef.current) fileInputRef.current.value = '';
       } catch (err: any) {
         console.error("Google Drive Upload Failed", err);
-        setError(`Google Drive Upload Failed: ${err.message || err}`);
+        setError(`Google Drive Upload Failed: ${err.message || err}. Saved locally instead.`);
+        
+        if (selectedFileData) {
+          const newAttachment: Attachment = {
+            id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+            name: newDocName.trim(),
+            fileName: autoFileName,
+            fileType: selectedFile.type,
+            fileData: selectedFileData,
+            uploadedAt: new Date().toISOString()
+          };
+
+          setFormData(prev => ({
+            ...prev,
+            attachments: [...(prev.attachments || []), newAttachment]
+          }));
+
+          setNewDocName('');
+          setSelectedFile(null);
+          setSelectedFileData(null);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
       } finally {
         setIsUploadingToDrive(false);
       }
@@ -416,9 +462,31 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
         setError(null);
       } catch (err: any) {
         console.error("Auto-add of attachment failed during save", err);
-        setError(`Failed to save: could not upload pending attachment. ${err.message || err}`);
-        setIsUploadingToDrive(false);
-        return;
+        setError(`Failed to upload to Google Drive: ${err.message || err}. Saved locally instead.`);
+        
+        if (selectedFileData) {
+          const autoFileName = `GERS_${(formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_')}_${(formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_')}_Doc_${newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.${selectedFile.name.split('.').pop() || 'png'}`;
+          const fallbackAttachment: Attachment = {
+            id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+            name: newDocName.trim(),
+            fileName: autoFileName,
+            fileType: selectedFile.type,
+            fileData: selectedFileData,
+            uploadedAt: new Date().toISOString()
+          };
+
+          finalFormData = {
+            ...formData,
+            attachments: [...(formData.attachments || []), fallbackAttachment]
+          };
+
+          setFormData(finalFormData);
+
+          setNewDocName('');
+          setSelectedFile(null);
+          setSelectedFileData(null);
+          if (fileInputRef.current) fileInputRef.current.value = '';
+        }
       } finally {
         setIsUploadingToDrive(false);
       }
