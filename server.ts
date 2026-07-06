@@ -320,6 +320,8 @@ async function seedRealEmployeesIfNeeded() {
   }
 }
 
+let lastDbSyncTime: string | null = null;
+
 async function syncDrizzleToFirestore() {
   if (!isFallbackActive() || !firestoreDb) return;
   
@@ -327,21 +329,21 @@ async function syncDrizzleToFirestore() {
     const localDbPath = getLocalDbPath();
     let content = '';
     try {
-      content = await fs.readFile(localDbPath, 'utf-8');
+      content = await fs.promises.readFile(localDbPath, 'utf-8');
     } catch (err) {
       console.log('[Firebase] Local Drizzle DB file not found, skipping Firestore sync.');
       return;
     }
     
     console.log(`[Firebase] Syncing local Drizzle database (${content.length} bytes) to Firestore...`);
+    const updatedAt = new Date().toISOString();
+    lastDbSyncTime = updatedAt;
     
-    // If it's too large, we'll need to chunk it. 
-    // Firestore has a 1MB limit.
     if (content.length > 900000) {
       const numChunks = Math.ceil(content.length / 800000);
       await setDoc(doc(firestoreDb, 'system_sync', 'drizzle_local_db'), { 
         chunks: numChunks,
-        updatedAt: new Date().toISOString()
+        updatedAt
       });
       for (let i = 0; i < numChunks; i++) {
         const chunk = content.slice(i * 800000, (i + 1) * 800000);
@@ -350,7 +352,7 @@ async function syncDrizzleToFirestore() {
     } else {
       await setDoc(doc(firestoreDb, 'system_sync', 'drizzle_local_db'), { 
         value: content,
-        updatedAt: new Date().toISOString()
+        updatedAt
       });
     }
     console.log('[Firebase] Drizzle fallback sync complete.');
@@ -363,12 +365,16 @@ async function loadDrizzleFromFirestore() {
   if (!isFallbackActive() || !firestoreDb) return;
   
   try {
-    console.log('[Firebase] Attempting to restore Drizzle local database from Firestore...');
     const docRef = doc(firestoreDb, 'system_sync', 'drizzle_local_db');
     const docSnap = await getDoc(docRef);
     
     if (docSnap.exists()) {
       const data = docSnap.data();
+      if (lastDbSyncTime && data.updatedAt && lastDbSyncTime === data.updatedAt) {
+        return; // Already up to date
+      }
+      
+      console.log('[Firebase] Attempting to restore Drizzle local database from Firestore...');
       let content = '';
       
       if (data.chunks) {
@@ -385,7 +391,8 @@ async function loadDrizzleFromFirestore() {
       
       if (content) {
         const localDbPath = getLocalDbPath();
-        await fs.writeFile(localDbPath, content, 'utf-8');
+        await fs.promises.writeFile(localDbPath, content, 'utf-8');
+        lastDbSyncTime = data.updatedAt || null;
         console.log(`[Firebase] Successfully restored Drizzle local database (${content.length} bytes) from Firestore.`);
       }
     } else {
@@ -438,7 +445,22 @@ app.use(async (req, res, next) => {
   const isHealth = req.url === '/api/health' || req.url === '/health' || req.url.startsWith('/api/health?');
   
   if (isApi && !isHealth) {
-    await ensureDbLoaded();
+    if (process.env.VERCEL) {
+      // In Vercel, serverless functions can have stale memory. Always verify with Firestore before proceeding.
+      if (!isInitializing) {
+        try {
+          if (!dbLoaded) {
+            await ensureDbLoaded();
+          } else {
+            await loadDrizzleFromFirestore(); // Check if there are new updates
+          }
+        } catch (e) {
+          console.error('[Vercel] Error during DB check:', e);
+        }
+      }
+    } else {
+      await ensureDbLoaded();
+    }
   }
   next();
 });
