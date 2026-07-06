@@ -3,16 +3,20 @@ import { Pool } from 'pg';
 import * as schema from './schema.ts';
 import fs from 'fs/promises';
 import path from 'path';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export const createPool = () => {
-  if (process.env.DATABASE_URL) {
+  console.log('[DEBUG] DATABASE_URL in index.ts:', process.env.POSTGRES_URL);
+  if (process.env.POSTGRES_URL) {
     console.log('[DB] Creating PostgreSQL pool using DATABASE_URL...');
     return new Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: process.env.POSTGRES_URL,
       max: process.env.VERCEL ? 3 : 10,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 15000,
-      ssl: process.env.DATABASE_URL.includes('localhost') || process.env.DATABASE_URL.includes('127.0.0.1') ? false : {
+      ssl: {
         rejectUnauthorized: false
       }
     });
@@ -29,7 +33,7 @@ export const createPool = () => {
   });
 };
 
-const pool = createPool();
+export const pool = createPool();
 
 let _drizzle: any = null;
 function getDrizzle() {
@@ -135,6 +139,19 @@ async function initializePostgresSchema(pgPool: Pool) {
       console.log('[DB] Table "employees" already exists, skipping creation.');
     }
     
+    const configsExist = await tableExists(client, 'system_configs');
+    if (!configsExist) {
+      console.log('[DB] Table "system_configs" does not exist. Creating system_configs table...');
+      await client.query(`
+        CREATE TABLE system_configs (
+          key TEXT PRIMARY KEY,
+          value JSONB NOT NULL
+        );
+      `);
+    } else {
+      console.log('[DB] Table "system_configs" already exists, skipping creation.');
+    }
+    
     console.log('[DB] PostgreSQL tables checked and verified.');
   } catch (err: any) {
     console.error('[DB] Failed to initialize PostgreSQL tables:', err.message);
@@ -144,7 +161,7 @@ async function initializePostgresSchema(pgPool: Pool) {
 }
 
 // Resilient Fallback State
-let useFallbackMode = !process.env.SQL_HOST && !process.env.DATABASE_URL;
+let useFallbackMode = !process.env.SQL_HOST && !process.env.POSTGRES_URL;
 let connectionChecked = false;
 
 export async function checkConnection() {
