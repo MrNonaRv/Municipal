@@ -10,7 +10,6 @@ import dotenv from 'dotenv';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, setDoc, deleteDoc, collection, getDocs } from 'firebase/firestore';
 import { google } from 'googleapis';
-import initialDatabase from './database.json';
 
 import { db, isFallbackActive, getLocalDbPath } from './src/db/index.ts';
 import { employees } from './src/db/schema.ts';
@@ -91,6 +90,19 @@ async function findDatabaseJson() {
   return null;
 }
 
+async function getInitialDatabase() {
+  try {
+    const dbPath = await findDatabaseJson();
+    if (dbPath) {
+      const content = await fs.readFile(dbPath, 'utf-8');
+      return JSON.parse(content);
+    }
+  } catch (e) {
+    console.error('Failed to read initial database.json:', e);
+  }
+  return {};
+}
+
 let firebaseApp: any = null;
 let firestoreDb: any = null;
 
@@ -144,10 +156,10 @@ async function loadDb() {
           try {
             content = await fs.readFile(sourcePath, 'utf-8');
           } catch (readErr) {
-            content = JSON.stringify(initialDatabase);
+            content = JSON.stringify(await getInitialDatabase());
           }
         } else {
-          content = JSON.stringify(initialDatabase);
+          content = JSON.stringify(await getInitialDatabase());
         }
         await fs.writeFile(DB_FILE, content, 'utf-8');
         console.log('Initialized database.json in /tmp');
@@ -157,14 +169,14 @@ async function loadDb() {
         const dbPath = await findDatabaseJson() || DB_FILE;
         content = await fs.readFile(dbPath, 'utf-8');
       } catch (err) {
-        content = JSON.stringify(initialDatabase);
+        content = JSON.stringify(await getInitialDatabase());
         await fs.writeFile(DB_FILE, content, 'utf-8');
       }
     }
     dbCache = JSON.parse(content || '{}');
   } catch (error: any) {
     console.error('Failed to load JSON database:', error);
-    dbCache = { ...initialDatabase } as any;
+    dbCache = (await getInitialDatabase()) as any;
   }
 
   // Now, try loading from Firestore (if initialized)
@@ -250,7 +262,8 @@ async function seedRealEmployeesIfNeeded() {
       console.log('[Seed] Database is empty. Seeding real employees from database.json...');
       const recordsToSeed: any[] = [];
       
-      for (const [key, value] of Object.entries(initialDatabase)) {
+      const initialDb = await getInitialDatabase();
+      for (const [key, value] of Object.entries(initialDb)) {
         if (value && typeof value === 'object' && 'surname' in value) {
           const empVal = value as any;
           recordsToSeed.push({
@@ -329,7 +342,7 @@ async function syncDrizzleToFirestore() {
     const localDbPath = getLocalDbPath();
     let content = '';
     try {
-      content = await fs.promises.readFile(localDbPath, 'utf-8');
+      content = await fs.readFile(localDbPath, 'base64');
     } catch (err) {
       console.log('[Firebase] Local Drizzle DB file not found, skipping Firestore sync.');
       return;
@@ -391,7 +404,7 @@ async function loadDrizzleFromFirestore() {
       
       if (content) {
         const localDbPath = getLocalDbPath();
-        await fs.promises.writeFile(localDbPath, content, 'utf-8');
+        await fs.writeFile(localDbPath, content, 'base64');
         lastDbSyncTime = data.updatedAt || null;
         console.log(`[Firebase] Successfully restored Drizzle local database (${content.length} bytes) from Firestore.`);
       }
