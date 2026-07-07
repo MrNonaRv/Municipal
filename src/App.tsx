@@ -348,7 +348,7 @@ export default function App() {
   const filteredEmployees = useMemo(() => {
     const q = searchQuery.toLowerCase();
     return employees.filter(emp => {
-      const fullName = `${emp.firstName} ${emp.surname}`.toLowerCase();
+      const fullName = `${emp.firstName} ${emp.surname} ${emp.nameExtension || ""}`.toLowerCase();
       const latestDesignation = emp.serviceRecords.length > 0 
         ? emp.serviceRecords[emp.serviceRecords.length - 1].designation.toLowerCase()
         : '';
@@ -718,7 +718,7 @@ export default function App() {
               return (
                 <tr key={emp.id}>
                   <td className="border border-black p-2 font-mono">{emp.id}</td>
-                  <td className="border border-black p-2 font-bold">{emp.surname}, {emp.firstName} {emp.middleName}</td>
+                  <td className="border border-black p-2 font-bold">{emp.surname}, {emp.firstName} {emp.middleName ? emp.middleName.charAt(0) + "." : ""} {emp.nameExtension || ""}</td>
                   <td className="border border-black p-2">{emp.sex}</td>
                   <td className="border border-black p-2">{emp.civilStatus}</td>
                   <td className="border border-black p-2">{latest?.designation || 'N/A'}</td>

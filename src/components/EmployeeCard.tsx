@@ -12,8 +12,8 @@ interface Props {
 }
 
 export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDelete }: Props) {
-  const latestSR = employee.serviceRecords.length > 0 
-    ? employee.serviceRecords[employee.serviceRecords.length - 1] 
+  const latestSR = (employee.serviceRecords || []).length > 0 
+    ? (employee.serviceRecords || [])[(employee.serviceRecords || []).length - 1] 
     : null;
 
   if (viewMode === 'list') {
@@ -40,7 +40,7 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
         <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="flex flex-col">
             <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Full Name</span>
-            <h3 className="font-bold text-slate-900 truncate">{employee.surname}, {employee.firstName}</h3>
+            <h3 className="font-bold text-slate-900 truncate">{employee.surname}, {employee.firstName} {employee.middleName ? employee.middleName.charAt(0) + "." : ""} {employee.nameExtension || ""}</h3>
           </div>
           <div className="flex flex-col">
             <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Designation</span>
@@ -49,9 +49,9 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
           <div className="flex flex-col">
             <span className="text-[10px] uppercase tracking-widest text-slate-400 font-bold mb-1">Status</span>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full w-fit ${
-              latestSR?.status.toLowerCase().includes('perm') ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+              true ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
             }`}>
-              {latestSR?.status || 'N/A'}
+              {latestSR?.designation || 'N/A'}
             </span>
           </div>
           <div className="flex flex-col">
@@ -61,16 +61,9 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
         </div>
 
         <div className="flex items-center gap-2 max-md:opacity-100 md:opacity-0 group-hover:opacity-100 transition-all">
+          
           <button 
-            onClick={() => onView(employee)} 
-            aria-label={`View dossier for ${employee.firstName} ${employee.surname}`}
-            className="p-2 text-slate-400 hover:text-[var(--navy)] hover:bg-slate-100 rounded-lg transition-all" 
-            title="View Dossier"
-          >
-            <Eye size={18} />
-          </button>
-          <button 
-            onClick={() => onEdit(employee)} 
+            onClick={(e) => { e.stopPropagation(); onEdit(employee); }} 
             aria-label={`Edit record for ${employee.firstName} ${employee.surname}`}
             className="p-2 text-slate-400 hover:text-[var(--gold-dark)] hover:bg-slate-100 rounded-lg transition-all" 
             title="Edit Record"
@@ -78,7 +71,7 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
             <Edit size={18} />
           </button>
           <button 
-            onClick={() => onDelete(employee)} 
+            onClick={(e) => { e.stopPropagation(); onDelete(employee); }} 
             aria-label={`Delete record for ${employee.firstName} ${employee.surname}`}
             className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" 
             title="Delete Record"
@@ -93,7 +86,8 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
   return (
     <motion.div 
       whileHover={{ y: -4 }}
-      className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl border border-slate-200 hover:border-[var(--gold)] transition-all flex flex-col group h-full relative"
+      className="bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-xl border border-slate-200 hover:border-[var(--gold)] transition-all flex flex-col group h-full relative cursor-pointer"
+      onClick={() => onView(employee)}
     >
       <div className="relative h-48 bg-slate-900 overflow-hidden">
         {employee.photo ? (
@@ -112,16 +106,16 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
         <div className="absolute bottom-4 left-4 right-4">
           <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[var(--gold)] mb-1 block">Official Record</span>
           <h3 className="text-white font-playfair text-xl font-bold leading-tight truncate">
-            {employee.surname}, {employee.firstName}
+            {employee.surname}, {employee.firstName} {employee.middleName ? employee.middleName.charAt(0) + "." : ""} {employee.nameExtension || ""}
           </h3>
         </div>
         <div className="absolute top-4 right-4">
           <span className={`text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full backdrop-blur-md border ${
-            latestSR?.status.toLowerCase().includes('perm') 
+            true 
               ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
               : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
           }`}>
-            {latestSR?.status || 'N/A'}
+            {latestSR?.designation || 'N/A'}
           </span>
         </div>
       </div>
@@ -167,16 +161,9 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
             </div>
           </div>
           <div className="flex items-center gap-1">
+            
             <button 
-              onClick={() => onView(employee)} 
-              aria-label={`View dossier for ${employee.firstName} ${employee.surname}`}
-              className="p-2.5 bg-slate-50 hover:bg-[var(--navy)] text-slate-400 hover:text-white rounded-xl transition-all"
-              title="View Dossier"
-            >
-              <Eye size={16} />
-            </button>
-            <button 
-              onClick={() => onEdit(employee)} 
+              onClick={(e) => { e.stopPropagation(); onEdit(employee); }} 
               aria-label={`Edit record for ${employee.firstName} ${employee.surname}`}
               className="p-2.5 bg-slate-50 hover:bg-[var(--gold)] text-slate-400 hover:text-[var(--navy)] rounded-xl transition-all"
               title="Edit Record"
@@ -184,7 +171,7 @@ export default function EmployeeCard({ employee, viewMode, onView, onEdit, onDel
               <Edit size={16} />
             </button>
             <button 
-              onClick={() => onDelete(employee)} 
+              onClick={(e) => { e.stopPropagation(); onDelete(employee); }} 
               aria-label={`Delete record for ${employee.firstName} ${employee.surname}`}
               className="p-2.5 bg-slate-50 hover:bg-red-500 text-slate-400 hover:text-white rounded-xl transition-all"
               title="Delete Record"
