@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Attachment } from '../types/employee';
 import { X } from 'lucide-react';
 
@@ -8,6 +8,25 @@ interface PreviewModalProps {
 }
 
 export const PreviewModal: React.FC<PreviewModalProps> = ({ doc, onClose }) => {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (doc.driveFileId) return;
+    if (!doc.fileData || doc.fileType !== 'application/pdf') return;
+    
+    let active = true;
+    fetch(doc.fileData)
+      .then(res => res.blob())
+      .then(blob => {
+        if (active) setBlobUrl(URL.createObjectURL(blob));
+      })
+      .catch(e => console.error(e));
+
+    return () => {
+      active = false;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [doc]);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
       <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
@@ -24,7 +43,13 @@ export const PreviewModal: React.FC<PreviewModalProps> = ({ doc, onClose }) => {
             />
           ) : doc.fileType === 'application/pdf' ? (
              <iframe 
-               src={doc.driveWebViewLink || doc.fileData} 
+               src={doc.driveFileId ? `https://drive.google.com/file/d/${doc.driveFileId}/preview` : (blobUrl ? `${blobUrl}#view=FitH` : '')} 
+               className="w-full h-[60vh]" 
+               title={doc.name}
+             />
+          ) : doc.driveFileId ? (
+             <iframe 
+               src={`https://drive.google.com/file/d/${doc.driveFileId}/preview`} 
                className="w-full h-[60vh]" 
                title={doc.name}
              />

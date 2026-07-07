@@ -459,6 +459,15 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                 className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[var(--gold)] focus:border-transparent transition-all bg-white" 
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 block font-sans">Suffix (e.g. Jr., III)</label>
+              <input 
+                name="nameExtension" 
+                value={formData.nameExtension || ''} 
+                onChange={handleChange} 
+                className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:ring-1 focus:ring-[var(--gold)] focus:border-transparent transition-all bg-white" 
+              />
+            </div>
           </div>
         </div>
         
@@ -625,7 +634,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                               {doc.fileData && doc.fileType.startsWith('image/') ? (
                                 <img src={doc.fileData} alt={doc.name} className="w-full h-full object-cover" />
                               ) : doc.fileData && doc.fileType === 'application/pdf' ? (
-                                <iframe src={doc.fileData} className="w-full h-full" />
+                                <FileText size={48} className="text-indigo-400" />
                               ) : doc.driveFileId ? (
                                 <Cloud size={32} className="text-indigo-600" />
                               ) : (
