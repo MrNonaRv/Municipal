@@ -12,7 +12,8 @@ import SyncHistoryModal from './components/SyncHistoryModal';
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity, Database, X, Server, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { getDriveAccessToken, initDriveAuth, syncDriveConfigFromServer } from './services/driveStorage';
+import { getDriveAccessToken, initDriveAuth, syncDriveConfigFromServer, uploadFileToDrive } from './services/driveStorage';
+import { dataURLtoBlob } from './utils/helpers';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -68,6 +69,7 @@ export default function App() {
   const [isCSVModalOpen, setIsCSVModalOpen] = useState(false);
   const [csvModalTab, setCsvModalTab] = useState<'bulk' | 'single' | 'export' | 'gdrive'>('bulk');
   const [deletingEmp, setDeletingEmp] = useState<Employee | null>(null);
+  const [showAuthExpiredBanner, setShowAuthExpiredBanner] = useState(false);
 
   const { toasts, addToast, removeToast } = useToast();
 
@@ -91,6 +93,80 @@ export default function App() {
       }
     });
   };
+
+
+  // Auto-migrate local attachments to Drive if connected
+  useEffect(() => {
+    let isMigrating = false;
+    const migrateLocalToDrive = async () => {
+      if (!isDriveConnected || isMigrating) return;
+      isMigrating = true;
+      let hasChanges = false;
+      const updatedEmployees = [...employees];
+      let migratedCount = 0;
+
+      for (let i = 0; i < updatedEmployees.length; i++) {
+        const emp = updatedEmployees[i];
+        if (emp.attachments && emp.attachments.length > 0) {
+          let empChanged = false;
+          const newAttachments = [...emp.attachments];
+
+          for (let j = 0; j < newAttachments.length; j++) {
+            const att = newAttachments[j];
+            if (!att.driveFileId && att.fileData) {
+              try {
+                // Determine folder name (e.g. Employee ID or Name)
+                const folderName = `${emp.surname || 'Employee'}_${emp.firstName || ''}`.trim();
+                
+                // Convert base64 to Blob
+                const blob = dataURLtoBlob(att.fileData);
+                
+                // Upload to Drive
+                const result = await uploadFileToDrive(blob, att.fileName || att.name, att.fileType, folderName);
+                
+                if (result.success) {
+                  newAttachments[j] = {
+                    ...att,
+                    driveFileId: result.id,
+                    driveWebViewLink: result.webViewLink,
+                    storageProvider: 'gdrive',
+                  };
+                  // Free up space by removing the base64 data
+                  delete newAttachments[j].fileData;
+                  empChanged = true;
+                  migratedCount++;
+                }
+              } catch (e: any) {
+                console.error("Failed to migrate attachment", att.name, e);
+                if (e.message?.includes('authenticated') || e.message?.includes('expired') || e.message?.includes('credentials')) {
+                  addToast('Google Drive authentication expired. Please reconnect.', 'error');
+                  // Stop the entire migration
+                  isMigrating = false;
+                  return;
+                }
+              }
+            }
+          }
+
+          if (empChanged) {
+            updatedEmployees[i] = { ...emp, attachments: newAttachments };
+            await dbPut(updatedEmployees[i]);
+            hasChanges = true;
+          }
+        }
+      }
+      
+      if (hasChanges) {
+        setEmployees(updatedEmployees);
+        addToast(`Migrated ${migratedCount} local file(s) to Google Drive automatically`, 'success');
+      }
+      isMigrating = false;
+    };
+
+    if (employees.length > 0 && isDriveConnected) {
+      migrateLocalToDrive();
+    }
+  }, [isDriveConnected, employees]);
 
   useEffect(() => {
     // Check sync status
@@ -160,6 +236,11 @@ export default function App() {
       }
     };
     window.addEventListener('gers_drive_status_changed', handleDriveStatusChanged);
+
+    const handleAuthExpired = () => {
+      setShowAuthExpiredBanner(true);
+    };
+    window.addEventListener('gers_drive_auth_expired', handleAuthExpired);
 
     // Setup online/offline listeners & sync triggers
     const updateOnlineStatus = async () => {
@@ -271,6 +352,7 @@ export default function App() {
       window.removeEventListener('gers_sync_status_change', handleSyncStatusChange);
       window.removeEventListener('gers_data_synced', handleDataSynced);
       window.removeEventListener('gers_drive_status_changed', handleDriveStatusChanged);
+      window.removeEventListener('gers_drive_auth_expired', handleAuthExpired);
       window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
       window.removeEventListener('gers_server_reachability_change', handleReachabilityChange);
       window.removeEventListener('gers_trigger_sync', triggerSync);

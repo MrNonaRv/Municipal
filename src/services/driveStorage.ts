@@ -158,6 +158,7 @@ const clearDriveAuth = async () => {
   window.dispatchEvent(new CustomEvent('gers_drive_status_changed', { 
     detail: { connected: false, provider: null, user: null } 
   }));
+  window.dispatchEvent(new CustomEvent('gers_drive_auth_expired'));
 };
 
 export const driveLogout = async () => {

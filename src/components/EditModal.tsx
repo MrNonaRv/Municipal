@@ -228,7 +228,14 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     if (uploadDestination === 'drive') {
       setIsUploadingToDrive(true);
       try {
-        const result = await uploadFileToDrive(selectedFile, selectedFile.name, selectedFile.type);
+        const ext = selectedFile.name.split('.').pop() || 'png';
+        const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
+        const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
+
+        const result = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type, folderName);
         if (result) {
           newDoc.driveFileId = result.id;
           newDoc.driveWebViewLink = result.webViewLink;
