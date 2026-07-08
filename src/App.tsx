@@ -455,9 +455,9 @@ export default function App() {
             <motion.div 
               initial={{ rotate: -10, scale: 0.9 }}
               animate={{ rotate: 0, scale: 1 }}
-              className="w-12 h-12 bg-[var(--gold)] rounded-xl flex items-center justify-center text-[var(--navy)] shadow-lg shadow-gold/20 shrink-0"
+              className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-[var(--navy)] shadow-lg shadow-gold/20 shrink-0 overflow-hidden border-2 border-[var(--gold)]"
             >
-              <Users size={28} />
+              <img src="/Systemlogo.jpg" alt="System Logo" className="w-full h-full object-contain" />
             </motion.div>
             <div className="min-w-0">
               <h1 className="font-playfair text-xl md:text-2xl font-bold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
