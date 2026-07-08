@@ -243,6 +243,13 @@ export default function App() {
     };
     window.addEventListener('gers_drive_auth_expired', handleAuthExpired);
 
+    const handleOpenDriveSettings = () => {
+      setCsvModalTab('gdrive');
+      setIsCSVModalOpen(true);
+      setShowAuthExpiredBanner(false);
+    };
+    window.addEventListener('gers_open_drive_settings', handleOpenDriveSettings);
+
     // Setup online/offline listeners & sync triggers
     const updateOnlineStatus = async () => {
       const online = navigator.onLine;
@@ -354,6 +361,7 @@ export default function App() {
       window.removeEventListener('gers_data_synced', handleDataSynced);
       window.removeEventListener('gers_drive_status_changed', handleDriveStatusChanged);
       window.removeEventListener('gers_drive_auth_expired', handleAuthExpired);
+      window.removeEventListener('gers_open_drive_settings', handleOpenDriveSettings);
       window.removeEventListener('gers_work_mode_change', handleWorkModeChanged);
       window.removeEventListener('gers_server_reachability_change', handleReachabilityChange);
       window.removeEventListener('gers_trigger_sync', triggerSync);

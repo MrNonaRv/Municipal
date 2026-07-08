@@ -477,9 +477,17 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
 
                     </div>
                     {driveError && (
-                      <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center gap-2">
-                        <X size={16} />
-                        {driveError}
+                      <div className="mb-6 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl text-xs font-bold uppercase tracking-wider flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle size={16} />
+                          <span>{driveError}</span>
+                        </div>
+                        <button
+                          onClick={() => window.dispatchEvent(new CustomEvent('gers_open_drive_settings'))}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors shadow-sm whitespace-nowrap"
+                        >
+                          Reconnect Drive
+                        </button>
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-6">
@@ -782,6 +790,51 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
             
             <div className="text-center text-[10px] font-mono text-slate-500 uppercase tracking-wider select-none">
               Personnel Records Vault • Secure PDS Dossier
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Document Preview Overlay */}
+      <AnimatePresence>
+        {previewDoc && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex flex-col p-2 md:p-6"
+          >
+            <div className="flex items-center justify-between mb-4 bg-slate-800 p-3 md:p-4 rounded-xl shadow-lg border border-slate-700 shrink-0">
+              <div className="flex items-center gap-3 overflow-hidden">
+                <FileText size={20} className="text-emerald-400 shrink-0" />
+                <h3 className="text-white font-bold text-sm md:text-base truncate">{previewDoc.name}</h3>
+                <span className="hidden sm:inline px-2 py-0.5 bg-slate-700 text-slate-300 text-[10px] font-black uppercase tracking-widest rounded-md shrink-0">
+                  {previewDoc.fileName}
+                </span>
+              </div>
+              <button 
+                onClick={() => setPreviewDoc(null)}
+                className="p-2 bg-slate-700 hover:bg-red-500 text-white rounded-lg transition-colors shrink-0 flex items-center gap-2 shadow-sm"
+              >
+                <span className="hidden sm:inline text-[10px] font-black uppercase tracking-widest">Close</span>
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="flex-1 w-full bg-black/50 rounded-xl overflow-hidden border border-slate-700 relative flex items-center justify-center">
+              {previewDoc.driveFileId ? (
+                <iframe src={`https://drive.google.com/file/d/${previewDoc.driveFileId}/preview`} className="w-full h-full border-0" title={previewDoc.name} />
+              ) : previewDoc.fileType.startsWith('image/') ? (
+                <img src={previewDoc.fileData} alt={previewDoc.name} className="max-w-full max-h-full object-contain" referrerPolicy="no-referrer" />
+              ) : previewDoc.fileType === 'application/pdf' ? (
+                <iframe src={previewDoc.fileData} className="w-full h-full border-0 bg-white" title={previewDoc.name} />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-slate-400 p-8 text-center">
+                  <FileText size={64} className="mb-4 opacity-50" />
+                  <p className="font-bold text-lg text-white mb-2">Preview Not Available</p>
+                  <p className="text-sm">Please download the file to view it.</p>
+                </div>
+              )}
             </div>
           </motion.div>
         )}
