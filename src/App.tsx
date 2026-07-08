@@ -14,6 +14,7 @@ import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud,
 import { motion, AnimatePresence } from 'motion/react';
 import { getDriveAccessToken, initDriveAuth, syncDriveConfigFromServer, uploadFileToDrive } from './services/driveStorage';
 import { dataURLtoBlob } from './utils/helpers';
+import systemLogo from './assets/Systemlogo.jpg';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -448,6 +449,29 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f0f2f5]">
+      {showAuthExpiredBanner && (
+        <div className="bg-red-500 text-white px-4 py-3 flex items-center justify-between shadow-md relative z-50">
+          <div className="flex items-center gap-3">
+            <AlertTriangle size={20} className="text-red-100" />
+            <div>
+              <p className="font-bold text-sm">Google Drive Session Expired</p>
+              <p className="text-xs text-red-100">For security reasons, your Drive session has expired. Please reconnect to resume uploading/downloading files.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => { setCsvModalTab('gdrive'); setIsCSVModalOpen(true); setShowAuthExpiredBanner(false); }}
+              className="px-4 py-1.5 bg-white text-red-600 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-red-50 transition-colors shadow-sm"
+            >
+              Reconnect
+            </button>
+            <button onClick={() => setShowAuthExpiredBanner(false)} className="text-red-200 hover:text-white transition-colors">
+              <X size={20} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[var(--navy)] text-white shadow-lg print:hidden">
         <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-0 md:h-20 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -457,7 +481,7 @@ export default function App() {
               animate={{ rotate: 0, scale: 1 }}
               className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-[var(--navy)] shadow-lg shadow-gold/20 shrink-0 overflow-hidden border-2 border-[var(--gold)]"
             >
-              <img src="/Systemlogo.jpg" alt="System Logo" className="w-full h-full object-contain" />
+              <img src={systemLogo} alt="System Logo" className="w-full h-full object-contain" />
             </motion.div>
             <div className="min-w-0">
               <h1 className="font-playfair text-xl md:text-2xl font-bold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
