@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
+import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, User } from 'firebase/auth';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
@@ -16,6 +16,29 @@ export const initDriveAuth = (
   onAuthSuccess?: (user: User, token: string) => void,
   onAuthFailure?: () => void
 ) => {
+  // Check for redirect result first (in case of popup fallback)
+  getRedirectResult(auth).then((result) => {
+    if (result) {
+      const credential = GoogleAuthProvider.credentialFromResult(result);
+      if (credential?.accessToken) {
+        cachedAccessToken = credential.accessToken;
+        localStorage.setItem('google_drive_access_token', cachedAccessToken);
+        const userData = {
+          uid: result.user.uid,
+          email: result.user.email,
+          displayName: result.user.displayName,
+          photoURL: result.user.photoURL
+        };
+        localStorage.setItem('gers_drive_user', JSON.stringify(userData));
+        fetch('/api/drive/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: cachedAccessToken, user: userData, storageProvider: 'gdrive' })
+        }).catch(console.warn);
+      }
+    }
+  }).catch(console.error);
+
   return onAuthStateChanged(auth, async (user: User | null) => {
     if (user) {
       if (cachedAccessToken) {
@@ -117,7 +140,9 @@ export const googleSignIn = async (): Promise<{ user: User; accessToken: string 
     isSigningIn = false;
     console.error('Sign in error:', error);
     if (error.code === 'auth/popup-blocked') {
-      throw new Error('Sign-in popup was blocked. Please allow popups for this site.');
+      console.log('Popup blocked by browser. Falling back to redirect sign-in...');
+      await signInWithRedirect(auth, provider);
+      return null;
     }
     if (error.code === 'auth/unauthorized-domain') {
       throw new Error('This domain is not authorized in Firebase Console (Auth > Settings > Authorized Domains).');
