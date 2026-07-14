@@ -283,14 +283,13 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
                 {/* Placeholder for left logo */}
                 <div className="w-16 h-16 rounded-full border-2 border-slate-300"></div>
               </div>
-              <div className="text-center space-y-1">
+              <div className="text-center space-y-0.5">
                 <p className="text-xs">Republic of the Philippines</p>
                 <p className="text-xs">Province of Capiz</p>
                 <p className="text-xs font-bold">Municipality of Mambusao</p>
                 <p className="text-sm font-bold uppercase mt-2">OFFICE OF THE MAYOR</p>
-                <div className="w-full h-px bg-black my-2"></div>
-                <p className="text-[10px] italic">Telephone (036) 6470-045</p>
-                <p className="text-[10px] italic">Email Address: mambusao_lgu@yahoo</p>
+                <p className="text-[10px] italic mt-1">Telephone (036) 6470-049</p>
+                <p className="text-[10px] italic">Email Address: mambusao_lgu@yahoo.com</p>
               </div>
               <div className="absolute right-8">
                 {/* Placeholder for right logo */}
@@ -326,7 +325,7 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
             <div className="px-8 space-y-6 text-sm mb-10">
               <div className="flex justify-between items-start">
                 <div className="w-3/4">
-                  <p>1. Adjusted monthly basic salary effective {newDate}, under the new Salary Schedule; SG- {newSg}, Step {newStep}</p>
+                  <p>1. Adjusted monthly basic salary effective {newDate}, under the new Salary Schedule: SG- {newSg}, Step {newStep}</p>
                 </div>
                 <div className="w-1/4 text-right">
                   <p>P {formattedNewSalary}</p>
@@ -335,7 +334,7 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
               
               <div className="flex justify-between items-start">
                 <div className="w-3/4">
-                  <p>2. Actual monthly basic salary as of {oldDate}; SG- {oldSg}, Step {oldStep}</p>
+                  <p>2. Actual monthly basic salary as of {oldDate}: SG- {oldSg}, Step {oldStep}</p>
                 </div>
                 <div className="w-1/4 text-right">
                   <p>P {formattedOldSalary}</p>
@@ -344,7 +343,7 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
               
               <div className="flex justify-between items-start font-bold">
                 <div className="w-3/4">
-                  <p>3. Monthly Salary Adjustment effective {newDate}</p>
+                  <p>3. Monthly Salary Adjusted effective {newDate}</p>
                 </div>
                 <div className="w-1/4 text-right">
                   <p>P {monthlyAdjustment}</p>
@@ -361,7 +360,7 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
             <div className="flex justify-end mb-16 pr-12 text-sm">
               <div className="text-center">
                 <p className="text-left mb-8">Very truly yours,</p>
-                <p className="font-bold uppercase underline">{mayorName}</p>
+                <p className="font-bold uppercase">{mayorName}</p>
                 <p>Municipal Mayor</p>
               </div>
             </div>
