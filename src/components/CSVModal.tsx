@@ -56,10 +56,12 @@ export default function CSVModal({ onClose, onImport, onClear, employees, initia
   }, [activeTab]);
 
   const handleDriveLogin = async () => {
+    // Start sign in synchronously before any state updates to preserve user gesture
+    const signInPromise = googleSignIn();
     setIsLoggingInDrive(true);
     setError(null);
     try {
-      const result = await googleSignIn();
+      const result = await signInPromise;
       if (result) {
         setDriveUser(result.user);
         setIsDriveConnected(true);
