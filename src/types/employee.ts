@@ -1,3 +1,25 @@
+export interface NOSARecord {
+  id: string;
+  dateOfNotice: string;
+  newSg: string;
+  newStep: string;
+  newSalary: string;
+  newDate: string;
+  oldSg: string;
+  oldStep: string;
+  oldSalary: string;
+  oldDate: string;
+  designation: string;
+  itemNo: string;
+  fy: string;
+  lbcNo: string;
+  lbcDate: string;
+  eoNo: string;
+  eoDate: string;
+  mayorName: string;
+  createdAt: string;
+}
+
 export interface Child {
   name: string;
   dob: string;
@@ -90,6 +112,7 @@ export interface Employee {
   education: Education[];
   serviceRecords: ServiceRecord[];
   attachments?: Attachment[];
+  nosaRecords?: NOSARecord[];
   pdsScan?: string | null;
 }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Employee, Attachment } from '../types/employee';
-import { Printer, Edit, Trash2, X, FileText, History, Users, ShieldCheck, MapPin, Phone, Mail, Calendar, Download, ArrowLeft, FileUp, Eye, ZoomIn, Cloud, Loader2, ExternalLink } from 'lucide-react';
+import { Printer, Edit, Trash2, X, FileText, History, Users, ShieldCheck, MapPin, Phone, Mail, Calendar, Download, ArrowLeft, FileUp, Eye, ZoomIn, Cloud, Loader2, ExternalLink, Calculator, AlertTriangle } from 'lucide-react';
+import NOSAModal from './NOSAModal';
 import { motion, AnimatePresence } from 'motion/react';
 import { downloadFileFromDrive as downloadFileFromGDrive, deleteFileFromDrive } from '../services/driveStorage';
 import { PreviewModal } from './PreviewModal';
@@ -74,6 +75,7 @@ const DocumentThumbnail = ({ doc, onPreview }: { doc: Attachment; onPreview: (do
 export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSave }: Props) {
   const [activeTab, setActiveTab] = useState<'sr' | 'docs'>('sr');
   const [showDigitalPds, setShowDigitalPds] = useState<boolean>(!employee.pdsScan);
+  const [showNosa, setShowNosa] = useState<boolean>(false);
   const [isFullScreenPds, setIsFullScreenPds] = useState<boolean>(false);
   const [scale, setScale] = useState<number>(1);
   const [fitToWidth, setFitToWidth] = useState<boolean>(true);
@@ -264,6 +266,14 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
             >
               <Download size={14} className="group-hover:scale-110 transition-transform" /> 
               <span className="hidden sm:inline">Export</span>
+            </button>
+            <button 
+              onClick={() => setShowNosa(true)} 
+              aria-label="Generate NOSA"
+              className="flex items-center gap-2 p-2.5 md:px-5 md:py-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border border-blue-500/20 group"
+            >
+              <Calculator size={14} className="group-hover:scale-110 transition-transform" /> 
+              <span className="hidden sm:inline">NOSA</span>
             </button>
             <button 
               onClick={handlePrint} 
@@ -582,7 +592,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
       </motion.div>
 
       {/* PRINT-ONLY DOSSIER VIEW */}
-      <div className="hidden print:block w-full bg-white text-black p-8">
+      <div className={`hidden ${!showNosa ? 'print:block' : ''} w-full bg-white text-black p-8`}>
         <div className="w-full">
           {/* Title block */}
           <div className="flex justify-between items-start mb-6">
@@ -741,6 +751,7 @@ export default function ProfileModal({ employee, onClose, onEdit, onDelete, onSa
 
       {/* FULLSCREEN LIGHTBOX PORTAL */}
       <AnimatePresence>
+        {showNosa && <NOSAModal employee={employee} onClose={() => setShowNosa(false)} onSave={onSave} />}
         {isFullScreenPds && employee.pdsScan && (
           <motion.div 
             initial={{ opacity: 0 }}

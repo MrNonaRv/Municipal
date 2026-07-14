@@ -15,6 +15,7 @@ const DOCUMENT_TYPES = [
   { value: 'Diploma_Transcript', label: 'Diploma & Transcript (TOR)' },
   { value: 'Service_Record', label: 'Service Record' },
   { value: 'Appointment_Paper', label: 'Appointment Paper' },
+  { value: 'Notice_of_Salary_Adjustment', label: 'Notice of Salary Adjustment' },
   { value: 'Oath_of_Office', label: 'Oath of Office' },
   { value: 'Training_Certificate', label: 'Training / Seminar Certificate' },
   { value: 'Clearance', label: 'Clearance (NBI/Police/Medical)' },
@@ -48,9 +49,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
 
   // States for Scanned Documents Attachment
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [newDocName, setNewDocName] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [selectedFileData, setSelectedFileData] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
 
   // Check Storage connection status and online status to auto-detect destination
   useEffect(() => {
@@ -86,73 +85,7 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
 
   const handleAttachmentFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
-      const files = Array.from(e.target.files);
-      setIsUploadingToDrive(true);
-      setError(null);
-      let newAttachments: Attachment[] = [];
-
-      for (let i = 0; i < files.length; i++) {
-        let file = files[i];
-        if (uploadDestination === 'local' && file.size > 2 * 1024 * 1024 && !file.type.startsWith('image/')) {
-          setError(`${file.name} must be smaller than 2MB for local storage.`);
-          continue;
-        }
-
-        try {
-          if (file.type.startsWith('image/')) {
-            try {
-              file = await convertImageToPDF(file, file.name);
-            } catch (pdfErr) {
-              console.warn("Failed to convert image to PDF", pdfErr);
-            }
-          }
-          const base64 = await fileToBase64(file);
-          const docName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
-
-          const ext = file.name.split('.').pop() || 'png';
-          const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-          const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-          const sanitizedDoc = docName.trim().replace(/[^a-zA-Z0-9]/g, '_');
-          const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
-          
-          if (uploadDestination === 'drive') {
-            const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
-            let driveResult = await uploadFileToDrive(file, autoFileName, file.type, folderName);
-            newAttachments.push({
-              id: 'drive-' + driveResult.id,
-              name: docName.trim(),
-              fileName: driveResult.name,
-              fileType: file.type,
-              fileData: '',
-              uploadedAt: new Date().toISOString(),
-              driveFileId: driveResult.id,
-              driveWebViewLink: driveResult.webViewLink,
-              driveWebContentLink: driveResult.webContentLink,
-              storageProvider: 'gdrive'
-            });
-          } else {
-            newAttachments.push({
-              id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-              name: docName.trim(),
-              fileName: autoFileName,
-              fileType: file.type,
-              fileData: base64,
-              uploadedAt: new Date().toISOString()
-            });
-          }
-        } catch (err: any) {
-          console.error("Failed to upload " + file.name, err);
-          setError(`Failed to upload ${file.name}: ${err.message || err}`);
-        }
-      }
-
-      setFormData(prev => ({
-        ...prev,
-        attachments: [...(prev.attachments || []), ...newAttachments]
-      }));
-
-      if (fileInputRef.current) fileInputRef.current.value = '';
-      setIsUploadingToDrive(false);
+      await processFiles(Array.from(e.target.files));
     }
   };
 
@@ -184,90 +117,93 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
     }
   };
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    // Check file size (max 5MB for local to prevent bloat, larger allowed for drive)
-    const MAX_LOCAL_SIZE = 5 * 1024 * 1024; 
-    if (uploadDestination === 'local' && file.size > MAX_LOCAL_SIZE) {
-      alert('File is too large for local storage. Please select Google Drive or a file under 5MB.');
-      return;
-    }
+  const processFiles = async (files: File[]) => {
+    setIsUploadingToDrive(true);
+    setError(null);
+    let newAttachments: Attachment[] = [];
 
-    setSelectedFile(file);
-    
-    // If not uploading to Drive immediately, convert to Base64 for local preview/storage
-    try {
-      if (file.type.startsWith('image/')) {
-        const base64 = await fileToBase64(file);
-        setSelectedFileData(base64);
-      } else if (file.type === 'application/pdf') {
-        const base64 = await fileToBase64(file);
-        setSelectedFileData(base64);
-      } else {
-        alert('Only images and PDFs are currently supported for previews.');
+    for (let i = 0; i < files.length; i++) {
+      let file = files[i];
+      if (uploadDestination === 'local' && file.size > 2 * 1024 * 1024 && !file.type.startsWith('image/')) {
+        setError(`${file.name} must be smaller than 2MB for local storage.`);
+        continue;
       }
-    } catch (err) {
-      console.error('Error reading file:', err);
-      alert('Error reading file.');
-    }
-  };
 
-  const handleAddAttachment = async () => {
-    if (!newDocName.trim() || !selectedFile) return;
-
-    const newDoc: Attachment = {
-      id: crypto.randomUUID(),
-      name: newDocName.trim(),
-      fileName: selectedFile.name,
-      fileType: selectedFile.type,
-      uploadedAt: new Date().toISOString(),
-    };
-
-    if (uploadDestination === 'drive') {
-      setIsUploadingToDrive(true);
       try {
-        const ext = selectedFile.name.split('.').pop() || 'png';
+        if (file.type.startsWith('image/')) {
+          try {
+            file = await convertImageToPDF(file, file.name);
+          } catch (pdfErr) {
+            console.warn("Failed to convert image to PDF", pdfErr);
+          }
+        }
+        const base64 = await fileToBase64(file);
+        const docName = file.name.substring(0, file.name.lastIndexOf('.')) || file.name;
+
+        const ext = file.name.split('.').pop() || 'png';
         const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
         const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-        const sanitizedDoc = newDocName.trim().replace(/[^a-zA-Z0-9]/g, '_');
+        const sanitizedDoc = docName.trim().replace(/[^a-zA-Z0-9]/g, '_');
         const autoFileName = `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_${Date.now()}.${ext}`;
-        const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
-
-        const result = await uploadFileToDrive(selectedFile, autoFileName, selectedFile.type, folderName);
-        if (result) {
-          newDoc.driveFileId = result.id;
-          newDoc.driveWebViewLink = result.webViewLink;
-          console.log('Successfully uploaded to Google Drive', result);
+        
+        if (uploadDestination === 'drive') {
+          const folderName = `${(formData.surname || 'Employee').trim()}_${(formData.firstName || 'Record').trim()}_${formData.id || 'Unknown'}`;
+          let driveResult = await uploadFileToDrive(file, autoFileName, file.type, folderName);
+          newAttachments.push({
+            id: 'drive-' + driveResult.id,
+            name: docName.trim(),
+            fileName: driveResult.name,
+            fileType: file.type,
+            fileData: '',
+            uploadedAt: new Date().toISOString(),
+            driveFileId: driveResult.id,
+            driveWebViewLink: driveResult.webViewLink,
+            driveWebContentLink: driveResult.webContentLink,
+            storageProvider: 'gdrive'
+          });
         } else {
-          throw new Error('Upload to Drive returned no result');
+          newAttachments.push({
+            id: 'doc-' + Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+            name: docName.trim(),
+            fileName: autoFileName,
+            fileType: file.type,
+            fileData: base64,
+            uploadedAt: new Date().toISOString()
+          });
         }
-      } catch (err) {
-        console.error('Failed to upload to Drive:', err);
-        alert('Failed to upload to Google Drive. Check your connection and try again, or use Local storage.');
-        setIsUploadingToDrive(false);
-        return; // Stop execution on failure
-      }
-      setIsUploadingToDrive(false);
-    } else {
-      // Local storage - save the base64 string
-      if (selectedFileData) {
-        newDoc.fileData = selectedFileData;
+      } catch (err: any) {
+        console.error("Failed to upload " + file.name, err);
+        setError(`Failed to upload ${file.name}: ${err.message || err}`);
+        if (err.message && (err.message.includes('session expired') || err.message.includes('Not authenticated'))) {
+          break;
+        }
       }
     }
 
     setFormData(prev => ({
       ...prev,
-      attachments: [...(prev.attachments || []), newDoc]
+      attachments: [...(prev.attachments || []), ...newAttachments]
     }));
 
-    // Reset fields
-    setNewDocName('');
-    setSelectedFile(null);
-    setSelectedFileData(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    setIsUploadingToDrive(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragging(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await processFiles(Array.from(e.dataTransfer.files));
     }
   };
 
@@ -529,38 +465,39 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       </h3>
                       
                       <div className="space-y-4">
-                        {/* Unified Row: Name and File Selector */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Document Name / Label</label>
-                            <input
-                              type="text"
-                              placeholder="e.g. Birth Certificate, Diploma, Contract"
-                              value={newDocName}
-                              onChange={e => setNewDocName(e.target.value)}
-                              className="w-full border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-[var(--gold)] focus:border-[var(--gold)] bg-white h-10"
-                            />
-                          </div>
-
-                          <div className="space-y-2">
-                            <label className="data-label text-[10px] uppercase font-bold tracking-wider text-slate-500">Scanned Document File</label>
-                            <div className="flex gap-3">
-                              <input
-                                type="file"
-                                accept="image/*,application/pdf"
-                                onChange={handleAttachmentFileChange}
-                                ref={fileInputRef}
-                                className="hidden"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => fileInputRef.current?.click()}
-                                className="w-full px-4 py-2 border-2 border-dashed border-slate-300 rounded-lg hover:border-[var(--gold)] transition-colors text-xs text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2 bg-white h-10 truncate"
-                              >
-                                <FileText size={16} className="shrink-0" />
-                                <span className="truncate">{selectedFile ? selectedFile.name : "Select Image/Scan File"}</span>
-                              </button>
-                            </div>
+                        <div 
+                          className={`flex flex-col items-center justify-center p-8 border-2 border-dashed rounded-xl transition-colors cursor-pointer ${isDragging ? 'border-[var(--gold)] bg-[var(--gold)]/5' : 'border-slate-300 hover:border-slate-400 bg-white'}`}
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <input
+                            type="file"
+                            accept="image/*,application/pdf"
+                            onChange={handleAttachmentFileChange}
+                            ref={fileInputRef}
+                            className="hidden"
+                            multiple
+                          />
+                          <div className="flex flex-col items-center gap-3">
+                            {isUploadingToDrive ? (
+                              <>
+                                <Loader2 size={32} className="animate-spin text-[var(--gold)]" />
+                                <div className="text-center">
+                                  <p className="text-sm font-bold text-slate-700">Uploading files...</p>
+                                  <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">Please wait</p>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <FileUp size={32} className={`transition-colors ${isDragging ? 'text-[var(--gold)]' : 'text-slate-400'}`} />
+                                <div className="text-center">
+                                  <p className="text-sm font-bold text-slate-700">Drag & drop multiple files here</p>
+                                  <p className="text-[10px] text-slate-500 mt-1 uppercase tracking-wider">or click to browse files</p>
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
 
@@ -577,23 +514,6 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                             </span>
                           )}
                         </div>
-
-                        {/* File Naming Preview Box */}
-                        {selectedFile && (
-                          <div className="bg-slate-100/80 border border-slate-200 rounded-xl p-3 mt-2 text-xs">
-                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-wider block mb-1">✨ Automatic Standardized Filename Preview:</span>
-                            <div className="font-mono text-[10px] text-indigo-600 font-bold break-all flex items-center gap-1.5 bg-white p-2 rounded-lg border border-slate-200">
-                              <FileText size={12} className="text-indigo-500 shrink-0" />
-                              {(() => {
-                                const ext = selectedFile.name.split('.').pop() || 'png';
-                                const sanitizedSur = (formData.surname || 'Employee').trim().replace(/[^a-zA-Z0-9]/g, '_');
-                                const sanitizedFirst = (formData.firstName || 'Record').trim().replace(/[^a-zA-Z0-9]/g, '_');
-                                const sanitizedDoc = (newDocName || 'Doc').trim().replace(/[^a-zA-Z0-9]/g, '_');
-                                return `GERS_${sanitizedSur}_${sanitizedFirst}_Doc_${sanitizedDoc}_[timestamp].${ext}`;
-                              })()}
-                            </div>
-                          </div>
-                        )}
                       </div>
 
                       {!isDriveConnected && (
@@ -605,26 +525,6 @@ export default function EditModal({ employee, onClose, onSave, initialTab = 'ser
                       {isDriveConnected && uploadDestination === 'local' && (
                         <p className="mt-3 text-[9px] text-amber-500 italic">⚠️ Offline mode detected. File will be automatically saved locally and synchronized online later.</p>
                       )}
-                      
-                      <div className="mt-4 flex justify-end">
-                        <button
-                          type="button"
-                          onClick={handleAddAttachment}
-                          disabled={isUploadingToDrive || !newDocName.trim() || !selectedFile || (uploadDestination === 'local' && !selectedFileData)}
-                          className="px-6 py-2 bg-[var(--gold)] text-[var(--navy)] text-xs font-bold uppercase tracking-widest rounded-lg hover:bg-opacity-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-sm"
-                        >
-                          {isUploadingToDrive ? (
-                            <>
-                              <Loader2 size={14} className="animate-spin" />
-                              Uploading to Drive...
-                            </>
-                          ) : (
-                            <>
-                              <Plus size={14} /> Add Document
-                            </>
-                          )}
-                        </button>
-                      </div>
                     </div>
                   </div>
 

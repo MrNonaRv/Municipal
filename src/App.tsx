@@ -1,20 +1,19 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, lazy, Suspense } from 'react';
 import { Employee } from './types/employee';
 import { dbGetAll, dbPut, dbDelete, syncOfflineData, getSyncQueue, isOnline, getWorkMode, setWorkMode, WorkMode, checkServerConnection, getServerReachable, dbClearAll, addActivityLog, getIsSyncing } from './services/db';
 import { generateEmptyEmployee } from './utils/helpers';
 import EmployeeCard from './components/EmployeeCard';
-import ProfileModal from './components/ProfileModal';
-import EditModal from './components/EditModal';
-import CSVModal from './components/CSVModal';
+const ProfileModal = lazy(() => import('./components/ProfileModal'));
+const EditModal = lazy(() => import('./components/EditModal'));
+const CSVModal = lazy(() => import('./components/CSVModal'));
 import ToastContainer from './components/Toast';
-import ConfirmModal from './components/ConfirmModal';
-import SyncHistoryModal from './components/SyncHistoryModal';
+const ConfirmModal = lazy(() => import('./components/ConfirmModal'));
+const SyncHistoryModal = lazy(() => import('./components/SyncHistoryModal'));
 import { useToast } from './hooks/useToast';
 import { Users, FileSpreadsheet, Plus, Search, LayoutGrid, List, Printer, Cloud, CloudOff, Loader2, Wifi, WifiOff, RefreshCw, Activity, Database, X, Server, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getDriveAccessToken, initDriveAuth, syncDriveConfigFromServer, uploadFileToDrive } from './services/driveStorage';
 import { dataURLtoBlob } from './utils/helpers';
-import systemLogo from './assets/Systemlogo.jpg';
 
 export default function App() {
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -489,7 +488,7 @@ export default function App() {
               animate={{ rotate: 0, scale: 1 }}
               className="w-12 h-12 bg-white rounded-xl flex items-center justify-center text-[var(--navy)] shadow-lg shadow-gold/20 shrink-0 overflow-hidden border-2 border-[var(--gold)]"
             >
-              <img src={systemLogo} alt="System Logo" className="w-full h-full object-contain" />
+              <img src="/Systemlogo.jpg" alt="System Logo" className="w-full h-full object-contain" />
             </motion.div>
             <div className="min-w-0">
               <h1 className="font-playfair text-xl md:text-2xl font-bold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
@@ -739,6 +738,7 @@ export default function App() {
 
       {/* Modals */}
       <AnimatePresence>
+        <Suspense fallback={<div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center"><Loader2 className="animate-spin text-white" size={32} /></div>}>
         {viewingEmp && (
           <ProfileModal 
             employee={viewingEmp} 
@@ -802,6 +802,7 @@ export default function App() {
         {showSyncHistory && (
           <SyncHistoryModal onClose={() => setShowSyncHistory(false)} />
         )}
+      </Suspense>
       </AnimatePresence>
 
       <ToastContainer toasts={toasts} removeToast={removeToast} />
