@@ -278,9 +278,9 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
         <div className="w-full md:w-2/3 bg-slate-200 p-8 overflow-y-auto flex justify-center print:p-0 print:bg-white print:overflow-visible print:block">
           <div className="bg-white p-12 shadow-sm w-full max-w-[8.5in] min-h-[11in] text-black font-sans relative print:shadow-none print:w-full">
             {/* Header */}
-            <div className="flex justify-center items-center mb-8 relative">
-              <div className="absolute left-8 top-2">
-                <img src="/Systemlogo.jpg" alt="Municipality Logo" className="w-24 h-24 object-contain mix-blend-multiply" />
+            <div className="grid grid-cols-[1fr_2fr_1fr] items-center mb-8 gap-4">
+              <div className="flex justify-center">
+                <img src="/Systemlogo.jpg" alt="Municipality Logo" className="w-20 h-20 object-contain mix-blend-multiply" />
               </div>
               <div className="text-center space-y-0.5">
                 <p className="text-xs">Republic of the Philippines</p>
@@ -290,8 +290,8 @@ export default function NOSAModal({ employee, onClose, onSave }: Props) {
                 <p className="text-[10px] italic mt-1">Telephone (036) 6470-049</p>
                 <p className="text-[10px] italic">Email Address: mambusao_lgu@yahoo.com</p>
               </div>
-              <div className="absolute right-8 top-6">
-                <img src="https://upload.wikimedia.org/wikipedia/commons/9/99/Flag_of_the_Philippines.svg" alt="Philippine Flag" className="w-24 h-12 object-cover border border-slate-300" />
+              <div className="flex justify-center">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/9/99/Flag_of_the_Philippines.svg" alt="Philippine Flag" className="w-20 h-10 object-cover border border-slate-300" />
               </div>
             </div>
 
